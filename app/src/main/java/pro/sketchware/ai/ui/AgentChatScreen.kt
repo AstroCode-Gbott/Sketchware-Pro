@@ -807,7 +807,20 @@ class AgentChatScreen(
             menu.add(0, 2, 1, t.createLogic)
             menu.add(0, 3, 2, t.createLibrary)
             menu.add(0, 4, 3, t.createSkill)
+            menu.add(0, 5, 4, "🧬 Clone Proyek dari File APK (REA)")
             setOnMenuItemClickListener {
+                if (it.itemId == 5) {
+                    ContextAttachmentPicker.showFileOrFolderPicker(
+                        context = activity,
+                        scId = scId,
+                        mode = ContextAttachmentPicker.PickerMode.APK_ONLY
+                    ) { item ->
+                        addContextAttachment(item)
+                        prefill("Lakukan Full Clone & Reverse Engineering (REA) pada file APK yang saya lampirkan ini ke proyek Sketchware ini. Dekompilasi seluruh layout XML menjadi layar Activity & CustomView, impor semua drawable/asset/font/permission, analisis class & method DEX-nya, rekonstruksi penuh seluruh blok logika & custom Java di setiap layar, dan jalankan save_and_verify_compile hingga BUILD SUKSES!")
+                        focusComposer()
+                    }
+                    return@setOnMenuItemClickListener true
+                }
                 prefill(
                     when (it.itemId) {
                         1 -> t.promptCreateScreen
@@ -1838,15 +1851,20 @@ class AgentChatScreen(
 
             val isSubagent = toolName == "delegate_subagent"
             val isSkill = toolName == "use_skill"
-            if (isSubagent || isSkill) {
+            val isRea = toolName == "reconstruct_apk_project" || toolName.startsWith("mcp__rea_mcp__")
+            if (isSubagent || isSkill || isRea) {
                 row.addView(TextView(activity).apply {
-                    text = if (isSubagent) "SUB-AGENT" else "SKILL"
+                    text = when {
+                        isRea -> "REA CLONE"
+                        isSubagent -> "SUB-AGENT"
+                        else -> "SKILL"
+                    }
                     textSize = 9.5f
                     typeface = Typeface.MONOSPACE
                     setTypeface(typeface, Typeface.BOLD)
-                    setTextColor(if (isSubagent) cGold else cPrimary)
+                    setTextColor(if (isSubagent || isRea) cGold else cPrimary)
                     setPadding(dp(6), dp(1), dp(6), dp(1))
-                    background = rounded(cSurfaceHigh, 6f, if (isSubagent) cGold else cOutline)
+                    background = rounded(cSurfaceHigh, 6f, if (isSubagent || isRea) cGold else cOutline)
                 }, lp(-2, -2).apply { leftMargin = dp(8) })
             }
 
@@ -1922,11 +1940,18 @@ class AgentChatScreen(
         thinkingRow.visibility = if (running) View.VISIBLE else View.GONE
         if (running) {
             val ui = pro.sketchware.ai.config.AiStrings.current(activity)
-            val m = Regex("^Langkah\\s+(\\d+)/(\\d+):\\s*").find(statusText)
-            val clean = if (m != null) statusText.substring(m.range.last + 1) else statusText
+            val mBounded = Regex("^Langkah\\s+(\\d+)/(\\d+)(?:\\s*\\[[^\\]]+\\])?:\\s*").find(statusText)
+            val mUnlimited = Regex("^Langkah\\s+(\\d+)\\s*·\\s*∞(?:\\s*\\[[^\\]]+\\])?:\\s*").find(statusText)
+            val clean = when {
+                mUnlimited != null -> statusText.substring(mUnlimited.range.last + 1)
+                mBounded != null -> statusText.substring(mBounded.range.last + 1)
+                else -> statusText
+            }
             tvThinking.text = clean.ifBlank { ui.thinkingText }
             val stepLabel = when {
-                m != null -> "${m.groupValues[1]}/${m.groupValues[2]}"
+                mUnlimited != null -> "${mUnlimited.groupValues[1]} · ∞"
+                mBounded != null -> "${mBounded.groupValues[1]}/${mBounded.groupValues[2]}"
+                step > 0 && maxSteps <= 0 -> "$step · ∞"
                 step > 0 && maxSteps > 0 -> "$step/$maxSteps"
                 else -> ""
             }
@@ -2324,19 +2349,31 @@ class AgentChatScreen(
 
         addMenuCard(
             iconRes = R.drawable.ic_mtrl_apk_document,
-            title = if (isId) "Tambahkan File APK" else "Add APK File",
+            title = if (isId) "Tambahkan File APK (REA Full Clone)" else "Add APK File (REA Full Clone)",
             subtitle = if (isId) {
-                "Inspeksi struktur APK (DEX, Manifest, Layout, Drawable, Assets) atau ekstrak ke proyek ini"
+                "Reverse engineer & clone penuh APK (DEX, Manifest, Layout XML, Drawable, Assets) langsung menjadi proyek Sketchware"
             } else {
-                "Inspect APK structure (DEX, Manifest, Layouts, Drawables, Assets) or extract into project"
+                "Reverse engineer & full-clone APK (DEX, Manifest, Layout XML, Drawables, Assets) directly into Sketchware project"
             },
-            badgeText = "APK"
+            badgeText = "🧬 REA APK"
         ) {
             ContextAttachmentPicker.showFileOrFolderPicker(
                 context = activity,
                 scId = scId,
                 mode = ContextAttachmentPicker.PickerMode.APK_ONLY,
-                onAttached = { addContextAttachment(it) }
+                onAttached = { item ->
+                    addContextAttachment(item)
+                    if (etPrompt.text.isNullOrBlank() && item.badge.contains("REA CLONE")) {
+                        prefill(
+                            if (isId) {
+                                "Lakukan Full Clone & Reverse Engineering (REA) pada file APK yang saya lampirkan ini ke proyek Sketchware ini hingga selesai dan BUILD SUKSES!"
+                            } else {
+                                "Perform a Full Clone & Reverse Engineering (REA) of this attached APK into this Sketchware project until finished and BUILD SUCCEEDS!"
+                            }
+                        )
+                    }
+                    focusComposer()
+                }
             )
         }
 
@@ -2636,7 +2673,8 @@ class AgentChatScreen(
         "manage_mcp_connectors" to "Mengelola konektor MCP",
         "call_mcp_tool" to "Memanggil tool MCP",
         "manage_artifacts" to "Mengelola Workspace Artifacts",
-        "delegate_subagent" to "Delegasi Sub-Agent"
+        "delegate_subagent" to "Delegasi Sub-Agent",
+        "reconstruct_apk_project" to "REA Reverse Engineer & Clone APK"
     )
 
     private fun humanizeTool(name: String) = toolLabels[name]
@@ -2646,7 +2684,7 @@ class AgentChatScreen(
         if (json.isBlank()) return ""
         return try {
             val obj: JsonObject = JsonParser.parseString(json).asJsonObject
-            val keys = listOf("role", "skill_id", "file_name", "screen_name", "path", "target_id", "event_name", "name",
+            val keys = listOf("role", "skill_id", "apk_path", "xml_entry", "file_name", "screen_name", "path", "target_id", "event_name", "name",
                 "action", "library_names", "permissions", "goal", "task", "query")
             val parts = mutableListOf<String>()
             for (k in keys) {

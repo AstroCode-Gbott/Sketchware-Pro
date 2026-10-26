@@ -183,6 +183,19 @@ object ContextAttachmentPicker {
         }
         root.addView(cbAutoImportDrawable)
 
+        // Optional: Checkbox for APK mode to instruct REA Full Clone into current project
+        val cbFullCloneApk = MaterialCheckBox(context).apply {
+            text = if (isId) {
+                "🧬 Aktifkan Mode REA Full Clone (Decompile XML, DEX & Clone Penuh ke Proyek Ini)"
+            } else {
+                "🧬 Enable REA Full Clone Mode (Decompile XML, DEX & Full Clone into Project)"
+            }
+            isChecked = true
+            textSize = 12f
+            visibility = if (mode == PickerMode.APK_ONLY) View.VISIBLE else View.GONE
+        }
+        root.addView(cbFullCloneApk)
+
         // 3. Scrollable File & Folder List
         val listScroll = ScrollView(context).apply {
             layoutParams = LinearLayout.LayoutParams(
@@ -234,7 +247,12 @@ object ContextAttachmentPicker {
             } else {
                 val ext = target.extension.lowercase(Locale.ROOT)
                 when {
-                    ext == "apk" || mode == PickerMode.APK_ONLY -> buildApkContextItem(context, scId, target)
+                    ext == "apk" || mode == PickerMode.APK_ONLY -> buildApkContextItem(
+                        context = context,
+                        scId = scId,
+                        apkFile = target,
+                        fullCloneDirective = cbFullCloneApk.isChecked
+                    )
                     isImageExtension(ext) || mode == PickerMode.IMAGE_ONLY -> buildImageContextItem(
                         context = context,
                         scId = scId,
@@ -623,7 +641,12 @@ object ContextAttachmentPicker {
         )
     }
 
-    fun buildApkContextItem(context: Context, scId: String, apkFile: File): AttachedContextItem {
+    fun buildApkContextItem(
+        context: Context,
+        scId: String,
+        apkFile: File,
+        fullCloneDirective: Boolean = true
+    ): AttachedContextItem {
         val staged = stageFileInProjectContext(scId, apkFile)
         val sizeStr = formatBytes(apkFile.length())
         var dexCount = 0
@@ -652,6 +675,12 @@ object ContextAttachmentPicker {
         } catch (_: Exception) {
         }
 
+        val dexPreview = try {
+            pro.sketchware.ai.project.ApkProjectReconstructor.analyzeApkDex(staged, "", "", 18)
+        } catch (_: Throwable) {
+            null
+        }
+
         val block = buildString {
             appendLine("### [Attached APK File: ${apkFile.name}]")
             appendLine("- **Original Path**: `${apkFile.absolutePath}`")
@@ -669,14 +698,24 @@ object ContextAttachmentPicker {
             if (nativeLibs.isNotEmpty()) {
                 appendLine("- **Native Libraries (`lib/`)**: ${nativeLibs.joinToString(", ")}")
             }
-            appendLine("- **How to Inspect/Extract**: You can inspect or unpack this APK using `run_shell` (`unzip -l \"${staged.absolutePath}\"`, `apktool`, `javap`, `strings`, or python scripts), or extract assets/drawables/JARs into the current Sketchware project (`#$scId`).")
+            if (dexPreview != null && dexPreview.appClasses.isNotEmpty()) {
+                appendLine("- **Top DEX App Classes (${dexPreview.totalClassesCount} total)**: ${dexPreview.appClasses.take(12).joinToString(", ") { it.className }}")
+            }
+            if (fullCloneDirective) {
+                appendLine("- **🧬 REA FULL CLONE DIRECTIVE (ACTIVE)**:")
+                appendLine("  1. Segera panggil `reconstruct_apk_project(action=\"full_clone\", apk_path=\"${staged.absolutePath}\")` untuk mendekode `AndroidManifest.xml` & seluruh binary `res/layout/*.xml`, mengimpor drawables/assets/fonts/permissions, serta membuat layar Activity & CustomView di proyek Sketchware `#$scId`.")
+                appendLine("  2. Gunakan `reconstruct_apk_project(action=\"analyze_dex\", apk_path=\"${staged.absolutePath}\")` dan `reconstruct_apk_project(action=\"decode_xml\", apk_path=\"${staged.absolutePath}\", xml_entry=\"...\")` (atau MCP `rea_mcp` / `run_shell`) untuk membedah logika bisnis setiap Activity.")
+                appendLine("  3. Implementasikan seluruh logika `write_event_blocks`, `add_component`, dan `write_custom_java_file` di setiap layar hasil clone hingga proyek baru ini terkompilasi bersih (`save_and_verify_compile`)!")
+            } else {
+                appendLine("- **How to Inspect/Clone**: Call `reconstruct_apk_project(action=\"inspect\"|\"decode_xml\"|\"analyze_dex\"|\"full_clone\", apk_path=\"${staged.absolutePath}\")` or use MCP `rea_mcp` / `run_shell`.")
+            }
         }
 
         return AttachedContextItem(
             kind = AttachedContextItem.Kind.APK,
             displayName = apkFile.name,
             absolutePath = staged.absolutePath,
-            badge = "APK · $sizeStr · ${dexCount}DEX",
+            badge = if (fullCloneDirective) "🧬 REA CLONE · $sizeStr" else "APK · $sizeStr · ${dexCount}DEX",
             promptBlock = block
         )
     }

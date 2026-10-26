@@ -285,8 +285,15 @@ object AiSettingsDialog {
         )
 
         // 7. Agent Execution & MCP Settings
+        val cbUnlimitedSteps = MaterialCheckBox(context).apply {
+            text = "♾️ Langkah Long-Horizon Tidak Terbatas (Unlimited Steps — Biarkan AI Agent Bekerja Otonom Hingga Selesai)"
+            isChecked = config.unlimitedSteps
+        }
+        root.addView(cbUnlimitedSteps)
+
         val tilMaxSteps = TextInputLayout(context).apply {
-            hint = "Maksimum Langkah Long-Horizon per Run (5 - 100)"
+            hint = "Maksimum Langkah Manual bila Unlimited dimatikan (5 - 1000)"
+            isEnabled = !config.unlimitedSteps
         }
         val etMaxSteps = TextInputEditText(tilMaxSteps.context).apply {
             inputType = InputType.TYPE_CLASS_NUMBER
@@ -294,6 +301,9 @@ object AiSettingsDialog {
             setText(config.maxStepsPerRun.toString())
         }
         tilMaxSteps.addView(etMaxSteps)
+        cbUnlimitedSteps.setOnCheckedChangeListener { _, checked ->
+            tilMaxSteps.isEnabled = !checked
+        }
         root.addView(
             tilMaxSteps,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -667,7 +677,8 @@ object AiSettingsDialog {
                 if (keyText.isNotEmpty() || selectedProvider == AiProviderType.CUSTOM) {
                     config.saveProfile(selectedProvider, keyText, modelText, urlText)
                 }
-                val maxSteps = etMaxSteps.text?.toString()?.toIntOrNull() ?: 30
+                val maxSteps = etMaxSteps.text?.toString()?.toIntOrNull() ?: 50
+                config.unlimitedSteps = cbUnlimitedSteps.isChecked
                 config.maxStepsPerRun = maxSteps
                 config.autoBuildAndHeal = cbAutoBuild.isChecked
                 config.autoBackupBeforeRun = cbAutoBackup.isChecked

@@ -78,14 +78,15 @@ object AgentOrchestrator {
         val appCtx = context.applicationContext
         RuntimeLogHarness.ensureRegistered(appCtx)
         val config = AiConfigManager(appCtx)
-        val maxSteps = config.maxStepsPerRun
+        val unlimited = config.unlimitedSteps
+        val maxSteps = if (unlimited) 0 else config.maxStepsPerRun
         currentMaxSteps = maxSteps
         currentStep = 0
         isRunning = true
         cancelRequested.set(false)
 
         // Start foreground service so long-horizon tasks survive backgrounding
-        AgentForegroundService.start(appCtx, scId, "Memulai AI Agent...")
+        AgentForegroundService.start(appCtx, scId, "Memulai AI Agent (Unlimited Long-Horizon)...")
 
         val userEntry = AgentChatEntry(
             id = UUID.randomUUID().toString(),
@@ -98,7 +99,7 @@ object AgentOrchestrator {
         dispatchStatus(scId, true, "Menganalisis proyek & merencanakan langkah...", 1, maxSteps)
 
         executor.execute {
-            runLoop(appCtx, config, scId, userPrompt, activeScreenName, maxSteps)
+            runLoop(appCtx, config, scId, userPrompt, activeScreenName, maxSteps, unlimited)
         }
     }
 
@@ -108,7 +109,8 @@ object AgentOrchestrator {
         scId: String,
         userPrompt: String,
         activeScreenName: String?,
-        maxSteps: Int
+        maxSteps: Int,
+        unlimited: Boolean
     ) {
         try {
             ProjectGateway.ensureProjectLoaded(scId)
@@ -151,14 +153,25 @@ object AgentOrchestrator {
 
             var step = 1
             var continuationEpoch = 1
-            val maxContinuationEpochs = 4
+            val maxContinuationEpochs = if (unlimited) Int.MAX_VALUE else 4
             var prematureStopNudges = 0
+            var compileVerifyNudges = 0
+            var wroteToProjectInThisRun = false
             var buildVerifiedInThisRun = false
 
-            while (step <= maxSteps && !cancelRequested.get()) {
+            fun stepPrefix(s: Int, ep: Int): String {
+                return if (unlimited) {
+                    if (ep > 1) "Langkah $s · ∞ [Epoch $ep]" else "Langkah $s · ∞"
+                } else {
+                    val epLbl = if (ep > 1) " [Sesi $ep/$maxContinuationEpochs]" else ""
+                    "Langkah $s/$maxSteps$epLbl"
+                }
+            }
+
+            while ((unlimited || step <= maxSteps) && !cancelRequested.get()) {
                 currentStep = step
-                val epochLabel = if (continuationEpoch > 1) " [Sesi $continuationEpoch/$maxContinuationEpochs]" else ""
-                dispatchStatus(scId, true, "Langkah $step/$maxSteps$epochLabel: Berpikir (${config.getModelId()})...", step, maxSteps)
+                val prefix = stepPrefix(step, continuationEpoch)
+                dispatchStatus(scId, true, "$prefix: Berpikir (${config.getModelId()})...", step, maxSteps)
 
                 val systemPrompt = buildSystemPrompt(scId, mode, activeScreenName, config.autoBuildAndHeal, config.agentLanguage)
                 val compactedMessages = compactTurnMessages(turnMessages, aggressive = false)
@@ -172,7 +185,7 @@ object AgentOrchestrator {
                         compactTurnMessages(turnMessages, aggressive = attempt >= 2)
                     },
                     onRetry = { attempt, maxAttempts, reason ->
-                        val retryMsg = "Langkah $step/$maxSteps: $reason — Mencoba ulang ($attempt/$maxAttempts)..."
+                        val retryMsg = "$prefix: $reason — Mencoba ulang ($attempt/$maxAttempts)..."
                         dispatchStatus(scId, true, retryMsg, step, maxSteps)
                         val retryEntry = AgentChatEntry(
                             id = UUID.randomUUID().toString(),
@@ -191,7 +204,7 @@ object AgentOrchestrator {
                     val assistantEntry = AgentChatEntry(
                         id = UUID.randomUUID().toString(),
                         type = ChatEntryType.ASSISTANT,
-                        title = "AI Agent (Step $step$epochLabel)",
+                        title = if (unlimited) "AI Agent (Step $step · ∞)" else "AI Agent (Step $step)",
                         body = response.text
                     )
                     AgentMemoryStore.appendChatEntry(scId, assistantEntry)
@@ -199,12 +212,12 @@ object AgentOrchestrator {
                 }
 
                 if (response.toolCalls.isEmpty()) {
-                    // Premature-Stop Harness Guard: if in AUTOPILOT mode and tasks are still unfinished, nudge the agent
+                    // 1. Premature-Stop Harness Guard: if tasks in Long-Horizon Plan are still PENDING or IN_PROGRESS, keep working until finish!
                     val currentPlan = AgentMemoryStore.loadPlan(scId)
                     val unfinished = currentPlan.tasks.filter {
                         it.status == TaskStatus.PENDING || it.status == TaskStatus.IN_PROGRESS
                     }
-                    if (mode == AgentAutonomyMode.AUTOPILOT && unfinished.isNotEmpty() && prematureStopNudges < 2 && !cancelRequested.get()) {
+                    if (mode.allowsWriteTools && unfinished.isNotEmpty() && prematureStopNudges < 6 && !cancelRequested.get()) {
                         prematureStopNudges++
                         if (response.text.isNotBlank()) {
                             turnMessages.add(LlmTurnMessage(role = "assistant", content = response.text))
@@ -213,7 +226,23 @@ object AgentOrchestrator {
                         turnMessages.add(
                             LlmTurnMessage(
                                 role = "user",
-                                content = "[HARNESS AUTO-CONTINUATION GUARD] Masih ada task di Long-Horizon Plan yang belum selesai ($unfinishedSummary). Jangan berhenti dulu—panggil tool yang diperlukan untuk menyelesaikan seluruh task, perbarui status plan ke COMPLETED, dan jalankan save_and_verify_compile."
+                                content = "[HARNESS UNLIMITED LONG-HORIZON GUARD] Masih ada task di Long-Horizon Plan yang belum selesai ($unfinishedSummary). Jangan berhenti dulu—bekerjalah secara otonom hingga tuntas! Panggil tool yang diperlukan untuk menyelesaikan seluruh task, perbarui status plan ke COMPLETED, dan jalankan save_and_verify_compile."
+                            )
+                        )
+                        step++
+                        continue
+                    }
+
+                    // 2. Auto-Compile Verification Guard: if project was modified and autoBuildAndHeal is on, ensure save_and_verify_compile succeeded!
+                    if (mode.allowsWriteTools && config.autoBuildAndHeal && wroteToProjectInThisRun && !buildVerifiedInThisRun && compileVerifyNudges < 3 && !cancelRequested.get()) {
+                        compileVerifyNudges++
+                        if (response.text.isNotBlank()) {
+                            turnMessages.add(LlmTurnMessage(role = "assistant", content = response.text))
+                        }
+                        turnMessages.add(
+                            LlmTurnMessage(
+                                role = "user",
+                                content = "[HARNESS FINISH VERIFICATION GUARD] Anda telah mengubah proyek pada sesi ini tetapi belum menjalankan verifikasi kompilasi hingga BUILD SUKSES. Panggil `save_and_verify_compile` sekarang dan lakukan self-healing bila ditemukan error sebelum menyelesaikan pekerjaan!"
                             )
                         )
                         step++
@@ -241,19 +270,26 @@ object AgentOrchestrator {
                     )
                     AgentMemoryStore.appendChatEntry(scId, callEntry)
                     dispatchEntry(scId, callEntry)
-                    dispatchStatus(scId, true, "Langkah $step/$maxSteps: Menjalankan ${tc.name}...", step, maxSteps)
+                    dispatchStatus(scId, true, "$prefix: Menjalankan ${tc.name}...", step, maxSteps)
 
-                    val toolOutput = if (!mode.allowsWriteTools && SketchwareToolRegistry.isWriteTool(tc.name)) {
+                    val isMutatingTool = SketchwareToolRegistry.isWriteTool(tc.name) ||
+                        (tc.name == "reconstruct_apk_project" && tc.arguments.get("action")?.asString.equals("full_clone", ignoreCase = true))
+
+                    val toolOutput = if (!mode.allowsWriteTools && isMutatingTool) {
                         "Error: Tool '${tc.name}' mengubah proyek/berkas dan diblokir pada mode ${mode.title} (read-only). " +
                             "Gunakan tool baca-saja, atau minta pengguna berpindah ke mode tulis (Copilot/Agent/Autopilot)."
                     } else {
+                        if (isMutatingTool) {
+                            wroteToProjectInThisRun = true
+                            buildVerifiedInThisRun = false
+                        }
                         SketchwareToolRegistry.executeTool(
                             context = appCtx,
                             scId = scId,
                             toolName = tc.name,
                             args = tc.arguments
                         ) { progressMsg ->
-                            dispatchStatus(scId, true, "Langkah $step/$maxSteps: $progressMsg", step, maxSteps)
+                            dispatchStatus(scId, true, "$prefix: $progressMsg", step, maxSteps)
                         }
                     }
 
@@ -299,8 +335,31 @@ object AgentOrchestrator {
 
                 step++
 
-                // Episodic Milestone Auto-Continuation when step reaches maxSteps
-                if (step > maxSteps && !cancelRequested.get() && mode.allowsWriteTools && continuationEpoch < maxContinuationEpochs) {
+                // Sliding-Window Episodic Compaction for Unlimited Long-Horizon Mode:
+                // Every ~18 tool steps (turnMessages.size >= 38), roll over older tool turns so the LLM context stays lean & fast forever!
+                if (unlimited && turnMessages.size >= 38 && !cancelRequested.get()) {
+                    continuationEpoch++
+                    val currentPlan = AgentMemoryStore.loadPlan(scId)
+                    val unfinished = currentPlan.tasks.filter {
+                        it.status == TaskStatus.PENDING || it.status == TaskStatus.IN_PROGRESS
+                    }
+                    val tailMessages = turnMessages.takeLast(8).toList()
+                    turnMessages.clear()
+                    turnMessages.add(
+                        LlmTurnMessage(
+                            role = "user",
+                            content = """[SLIDING-WINDOW LONG-HORIZON CHECKPOINT — Epoch $continuationEpoch, Step $step]
+Tugas Asli Pengguna: "$userPrompt"
+Status Plan Saat Ini: ${if (unfinished.isEmpty()) "Semua task plan selesai, pastikan verifikasi kompilasi sukses." else "${unfinished.size} task belum selesai (${unfinished.joinToString(", ") { "${it.id}: ${it.title}" }})"}
+Ringkasan Proyek terbaru, Long-Horizon Plan (plan.json), dan Working Memory (memory.md) telah disegarkan di System Prompt. Lanjutkan eksekusi dari langkah terakhir berikut hingga tuntas!"""
+                        )
+                    )
+                    // Ensure tailMessages starts with an assistant message or user message (never an orphaned tool result)
+                    val firstAssistantIdx = tailMessages.indexOfFirst { it.role == "assistant" }
+                    if (firstAssistantIdx >= 0) {
+                        turnMessages.addAll(tailMessages.subList(firstAssistantIdx, tailMessages.size))
+                    }
+                } else if (!unlimited && step > maxSteps && !cancelRequested.get() && mode.allowsWriteTools && continuationEpoch < maxContinuationEpochs) {
                     val currentPlan = AgentMemoryStore.loadPlan(scId)
                     val unfinished = currentPlan.tasks.filter {
                         it.status == TaskStatus.PENDING || it.status == TaskStatus.IN_PROGRESS
@@ -339,12 +398,12 @@ Fokus selesaikan task yang masih berstatus IN_PROGRESS atau PENDING (${unfinishe
                 )
                 AgentMemoryStore.appendChatEntry(scId, cancelEntry)
                 dispatchEntry(scId, cancelEntry)
-            } else if (step > maxSteps) {
+            } else if (!unlimited && step > maxSteps) {
                 val limitEntry = AgentChatEntry(
                     id = UUID.randomUUID().toString(),
                     type = ChatEntryType.STATUS,
                     title = "Batas Langkah Tercapai ($maxSteps steps x $continuationEpoch sesi)",
-                    body = "Ketik 'Lanjutkan' untuk meneruskan eksekusi berdasarkan Long-Horizon Plan."
+                    body = "Ketik 'Lanjutkan' atau aktifkan 'Unlimited Steps' di Pengaturan AI untuk meneruskan eksekusi tanpa batas langkah."
                 )
                 AgentMemoryStore.appendChatEntry(scId, limitEntry)
                 dispatchEntry(scId, limitEntry)
@@ -554,6 +613,14 @@ Fokus selesaikan task yang masih berstatus IN_PROGRESS atau PENDING (${unfinishe
             9. **DeerFlow 2.0 Sub-Agent Delegation & Workspace Artifacts (`delegate_subagent` & `manage_artifacts`)**:
                - Untuk analisis arsitektur mendalam, audit blok logika lintas layar, atau investigasi error kompilasi tanpa membebani konteks utama, panggil `delegate_subagent(role="researcher"|"ui_architect"|"block_auditor"|"compile_debugger", task="...", target_screens="main,...")`.
                - Gunakan `manage_artifacts(action="write", file_name="...", content="...")` untuk menyimpan dokumen spesifikasi, laporan audit, atau deliverable sehingga pengguna dapat langsung membukanya dari panel **📦 Artifacts** di bagian atas layar chat.
+            10. **🧬 REA (Reverse Engineer Anything) & Full APK Project Cloner (`reconstruct_apk_project` & MCP `rea_mcp`)**:
+               - Ketika pengguna melampirkan file `.apk` (melalui tombol `+ Add Context -> Tambahkan File APK`) atau meminta clone/reverse-engineer APK:
+                 1) Segera panggil `reconstruct_apk_project(action="full_clone", apk_path="...")` untuk mendekode `AndroidManifest.xml` & seluruh binary `res/layout/*.xml`, mengimpor drawables/assets/fonts/permissions, membuat layar Activity & CustomView di proyek Sketchware `#$scId`, serta menghasilkan `rea_clone_blueprint.md` di Artifacts.
+                 2) Panggil `reconstruct_apk_project(action="analyze_dex", apk_path="...", query="...")` dan `reconstruct_apk_project(action="decode_xml", apk_path="...", xml_entry="...")` (atau tool MCP `mcp__rea_mcp__*`) untuk membedah struktur class DEX, method, field, konstanta, SQL, dan endpoint API dari APK sumber.
+                 3) Jangan berhenti hanya pada layout XML! Lanjutkan secara otonom mengimplementasikan seluruh logika bisnis setiap Activity (`write_event_logic`, `add_component`, `write_custom_java_file`), hubungkan navigasi antar layar, dan jalankan `save_and_verify_compile` hingga proyek hasil clone terkompilasi 100% sukses!
+            11. **♾️ Doktrin Paten: Principal Software Engineer, App Developer & Penguasa Terminal (Unlimited Long-Horizon Hingga Finish)**:
+               - Anda memegang kendali penuh sebagai Principal Software Engineer & Android App Developer dengan eksekusi **Unlimited Long-Horizon Steps (`∞`)**.
+               - Jangan pernah berhenti setengah jalan atau menyerahkan pekerjaan yang belum selesai kepada pengguna. Kuasai terminal (`run_shell`, `terminal_start`, `terminal_send`, Python 3, Bash, curl, git, sqlite3, unzip) dan seluruh tool Sketchware untuk menyelesaikan setiap masalah secara mandiri sampai seluruh task di `plan.json` berstatus `COMPLETED` dan `save_and_verify_compile` menghasilkan `BUILD SUKSES!`.
 
             $pluginsSection
 

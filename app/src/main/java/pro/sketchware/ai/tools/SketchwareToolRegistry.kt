@@ -525,6 +525,44 @@ Actions:
                 ToolParameterProperty("target_screens", "string", "Optional comma-separated screen names (e.g. 'main,login') to preload into the sub-agent context.", required = false)
             ),
             isWriteTool = false
+        ),
+        ToolDefinition(
+            name = "reconstruct_apk_project",
+            description = """REA (Reverse Engineer Anything) & Full APK Project Cloner — inspect any .apk file, decompile binary AndroidManifest.xml and res/layout/*.xml back into readable XML, analyze classes*.dex bytecode (classes, methods, fields, URLs, SQL/API strings), or perform a 'full_clone' that automatically clones all APK layouts into Sketchware screens/custom views, imports drawables/assets/fonts/permissions, and generates the REA Clone Blueprint artifact.""",
+            parameters = listOf(
+                ToolParameterProperty(
+                    "action",
+                    "string",
+                    "Action to perform: 'inspect' (deep APK + manifest + DEX overview), 'decode_xml' (decompile binary AndroidManifest.xml or res/layout/*.xml), 'analyze_dex' (inspect DEX classes, methods, fields, and strings), or 'full_clone' (automatically clone layouts, drawables, assets, fonts, permissions, and blueprint into the current Sketchware project).",
+                    required = true,
+                    enumValues = listOf("inspect", "decode_xml", "analyze_dex", "full_clone")
+                ),
+                ToolParameterProperty(
+                    "apk_path",
+                    "string",
+                    "Path to the .apk file (e.g. from an attached APK context item in .sketchware/data/<sc_id>/files/context_attachments/<name>.apk or /storage/emulated/0/Download/<name>.apk).",
+                    required = true
+                ),
+                ToolParameterProperty(
+                    "xml_entry",
+                    "string",
+                    "For action='decode_xml': entry path inside the APK such as 'AndroidManifest.xml' or 'res/layout/activity_main.xml'.",
+                    required = false
+                ),
+                ToolParameterProperty(
+                    "query",
+                    "string",
+                    "For action='analyze_dex': optional filter keyword or class/package substring (e.g. 'MainActivity', 'Login', 'api', 'db').",
+                    required = false
+                ),
+                ToolParameterProperty(
+                    "update_app_identity",
+                    "boolean",
+                    "For action='full_clone': whether to also update the current Sketchware project's app name & version to match the source APK (default false).",
+                    required = false
+                )
+            ),
+            isWriteTool = false
         )
     )
 
@@ -1297,6 +1335,82 @@ Analyze the provided project context and answer the Lead Agent's task concisely 
                         }
                     } else {
                         "=== Sub-Agent Local Inspection [$role] ===\n$ctxBuilder"
+                    }
+                }
+
+                "reconstruct_apk_project" -> {
+                    val action = args.str("action").ifBlank { "inspect" }.lowercase(Locale.US)
+                    val apkPath = args.str("apk_path")
+                    if (apkPath.isBlank()) {
+                        return "Error: parameter 'apk_path' wajib diisi untuk reconstruct_apk_project."
+                    }
+                    when (action) {
+                        "inspect", "info", "summary" -> {
+                            onProgressUpdate?.invoke("REA: Menginspeksi struktur APK & DEX bytecode…")
+                            val out = pro.sketchware.ai.project.ApkProjectReconstructor.inspectApk(context, scId, apkPath)
+                            OutputSpiller.maybeSpill(scId, "reconstruct_apk_project", out)
+                        }
+                        "decode_xml", "xml", "manifest" -> {
+                            val xmlEntry = args.str("xml_entry").ifBlank { "AndroidManifest.xml" }
+                            onProgressUpdate?.invoke("REA: Mendekode binary XML '$xmlEntry'…")
+                            val apkFile = pro.sketchware.ai.project.ApkProjectReconstructor.resolveApkFile(scId, apkPath)
+                            if (!apkFile.isFile) {
+                                "Error: File APK tidak ditemukan di '${apkFile.absolutePath}'."
+                            } else {
+                                val out = pro.sketchware.ai.project.ApkProjectReconstructor.decodeApkXmlEntry(context, apkFile, xmlEntry)
+                                OutputSpiller.maybeSpill(scId, "decode_xml_${xmlEntry.substringAfterLast('/')}", out)
+                            }
+                        }
+                        "analyze_dex", "dex", "classes" -> {
+                            val query = args.str("query")
+                            onProgressUpdate?.invoke("REA: Menganalisis tabel DEX (classes/methods/strings)…")
+                            val apkFile = pro.sketchware.ai.project.ApkProjectReconstructor.resolveApkFile(scId, apkPath)
+                            if (!apkFile.isFile) {
+                                "Error: File APK tidak ditemukan di '${apkFile.absolutePath}'."
+                            } else {
+                                val report = pro.sketchware.ai.project.ApkProjectReconstructor.analyzeApkDex(
+                                    apkFile = apkFile,
+                                    appPackageHint = "",
+                                    filterQuery = query,
+                                    maxClasses = 80
+                                )
+                                val text = buildString {
+                                    appendLine("=== 🔍 REA DEX ANALYSIS (${apkFile.name}) ===")
+                                    appendLine("DEX Files: ${report.dexFilesCount} | Total Classes: ${report.totalClassesCount} | Methods: ${report.totalMethodsCount} | Fields: ${report.totalFieldsCount}")
+                                    if (query.isNotEmpty()) appendLine("Filter Query: '$query'")
+                                    appendLine("\n--- MATCHED CLASSES (${report.appClasses.size}) ---")
+                                    for (cls in report.appClasses) {
+                                        appendLine("• ${cls.className} (extends ${cls.superClass})${if (cls.sourceFile != null) " [${cls.sourceFile}]" else ""}")
+                                        if (cls.fields.isNotEmpty()) appendLine("    Fields  : ${cls.fields.joinToString(", ")}")
+                                        if (cls.methods.isNotEmpty()) appendLine("    Methods : ${cls.methods.joinToString(", ")}")
+                                    }
+                                    if (report.discoveredUrls.isNotEmpty()) {
+                                        appendLine("\n--- DISCOVERED URLs (${report.discoveredUrls.size}) ---")
+                                        report.discoveredUrls.forEach { appendLine("- $it") }
+                                    }
+                                    if (report.interestingStrings.isNotEmpty()) {
+                                        appendLine("\n--- MATCHED / INTERESTING STRINGS (${report.interestingStrings.size}) ---")
+                                        report.interestingStrings.forEach { appendLine("- $it") }
+                                    }
+                                }.trim()
+                                OutputSpiller.maybeSpill(scId, "analyze_dex", text)
+                            }
+                        }
+                        "full_clone", "clone", "reconstruct" -> {
+                            if (! pro.sketchware.ai.config.AiConfigManager(context).autonomyMode.allowsWriteTools) {
+                                return "Error: Action 'full_clone' mengubah proyek dan membutuhkan mode tulis (Copilot / Agent / Autopilot)."
+                            }
+                            val updateId = args.bool("update_app_identity", false)
+                            val out = pro.sketchware.ai.project.ApkProjectReconstructor.fullCloneApkToProject(
+                                context = context,
+                                scId = scId,
+                                rawApkPath = apkPath,
+                                updateAppIdentity = updateId,
+                                onProgress = onProgressUpdate
+                            )
+                            OutputSpiller.maybeSpill(scId, "reconstruct_apk_full_clone", out)
+                        }
+                        else -> "Error: action '$action' tidak dikenal pada reconstruct_apk_project. Gunakan: inspect, decode_xml, analyze_dex, atau full_clone."
                     }
                 }
 

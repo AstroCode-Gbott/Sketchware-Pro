@@ -326,10 +326,105 @@ object SkillManager {
         raw.trim().lowercase().replace(Regex("[^a-z0-9._-]"), "-").trim('-').take(64)
 
     private fun seedBuiltInSkills() {
-        val marker = File(skillsRootDir(), ".seeded_v1")
+        val marker = File(skillsRootDir(), ".seeded_v2")
         if (marker.isFile) return
 
         val builtIns = listOf(
+            Triple(
+                "patent-principal-software-engineer",
+                "Patent Skill: Principal Software Engineer & Android App Architect",
+                "Doktrin paten rekayasa perangkat lunak end-to-end: arsitektur aplikasi Android skala produksi, penguasaan penuh ViewBean/BlockBean/ComponentBean/Custom Java, defensive programming, dan otonomi penuh hingga BUILD SUKSES."
+            ) to """
+                # Patent Skill: Principal Software Engineer & Android App Architect
+
+                Skill paten ini menetapkan standar tertinggi saat AI Agent merancang, membangun, merefaktor, atau menyelesaikan proyek aplikasi Android di Sketchware Pro:
+
+                ## 1. Deconstruct & Plan (Zero Ambiguity)
+                - Sebelum menyentuh kode pada tugas kompleks, selalu buat/perbarui **Long-Horizon Plan** (`update_long_horizon_plan`) yang memecah pekerjaan ke dalam milestone terukur:
+                  1. **Architecture & Assets/Libraries Setup** (`manage_project_resources`, `manage_local_libraries`, `configure_project_metadata`)
+                  2. **Multi-Screen UI & CustomView XML Construction** (`create_screen`, `write_screen_xml`)
+                  3. **Data Layer, Models & Custom Java Classes** (`write_custom_java_file`, `manage_variable`, `manage_list`, `add_component`)
+                  4. **Interactive Event Logic & Business Flows** (`write_event_logic`, `create_more_block`)
+                  5. **End-to-End Compile Verification & Self-Healing** (`save_and_verify_compile`)
+
+                ## 2. Production-Grade Android Architecture inside Sketchware Pro
+                - **Separation of Concerns**:
+                  - Untuk logika bisnis yang kompleks (seperti database helper SQLite, repositori API, enkripsi, parser, atau state manager), buat kelas Java modular menggunakan `write_custom_java_file(file_name="...", source_code="...")` di paket proyek, lalu panggil dari blok Activity!
+                  - Untuk daftar dinamis (`ListView`), selalu buat `CustomView` (`create_screen(screen_name="item_...", is_custom_view=true)`) dan hubungkan dengan `ListMap` + event `onBindCustomView`.
+                - **Defensive & Crash-Proof Engineering**:
+                  - Bungkus operasi I/O, parsing JSON (`Gson`/`JSONObject`), konversi angka (`Double.parseDouble`), dan akses indeks list di dalam `try { ... } catch (Exception _e) { ... }`.
+                  - Pastikan setiap pembaruan UI dari thread latar belakang dijalankan di dalam `runOnUiThread(new Runnable() { @Override public void run() { ... } });`.
+                  - Sediakan state kosong (*empty state*), indikator pemuatan (*loading state*), dan umpan balik pengguna yang jelas.
+
+                ## 3. Unlimited Long-Horizon Autonomy (Jangan Berhenti Sebelum Tuntas)
+                - Anda berjalan dengan mode **Unlimited Steps (`∞`)**. Jangan pernah menyerahkan kode setengah jadi atau meminta pengguna melanjutkan sendiri.
+                - Teruslah bekerja melintasi seluruh layar, event, dan resource sampai semua task di `plan.json` berstatus `COMPLETED` dan `save_and_verify_compile` menghasilkan **`BUILD SUKSES!`**.
+            """.trimIndent(),
+
+            Triple(
+                "patent-terminal-linux-commander",
+                "Patent Skill: Full Terminal & Debian Linux Workspace Commander",
+                "Penguasaan penuh atas terminal Android & Debian Linux (PRoot), otomasi Python3/Bash, manipulasi filesystem proyek, pembuatan aset/database, dan manajemen sesi PTY."
+            ) to """
+                # Patent Skill: Full Terminal & Debian Linux Workspace Commander
+
+                Anda memegang kendali penuh atas terminal di AI Agent Studio (`run_shell`, `terminal_start`, `terminal_send`, `terminal_read`, `terminal_list`, `terminal_kill`, `manage_linux_env`, serta MCP `debian_toolkit`).
+
+                ## 1. Peta Direktori Penting di Terminal
+                - **Data Proyek Aktif (`@project/`)**: `/storage/emulated/0/.sketchware/data/<sc_id>/`
+                  - `files/java/` : Kelas Java kustom proyek
+                  - `files/resource/` : Resource Android kustom (`drawable/`, `values/`, `xml/`, `images/`, `fonts/`, `sounds/`)
+                  - `files/assets/` : File aset bundel APK (`assets/`)
+                  - `files/rea_workspace/` : Hasil ekstraksi & dekompilasi REA APK
+                  - `ai_artifacts/` : Deliverable di panel **📦 Artifacts**
+                - **Output Build & Source Proyek (`@mysc/`)**: `/storage/emulated/0/.sketchware/mysc/<sc_id>/`
+                - **Local Libraries (`@libs/`)**: `/storage/emulated/0/.sketchware/libs/local_libs/`
+
+                ## 2. Kapan & Bagaimana Menguasai Terminal Secara Leluasa
+                - **Otomasi Skrip Python 3 (`python3 -c "..."` atau `mcp__debian_toolkit__python_eval`)**:
+                  - Gunakan Python 3 untuk men-generate dataset JSON/SQLite awal di `files/assets/`, memproses ratusan baris XML/Java secara batch, menghasilkan gambar/ikon SVG/PNG, atau memvalidasi sintaks JSON/XML.
+                - **Inspeksi & Pemrosesan Binari/Arsip (`unzip`, `javap`, `strings`, `sqlite3`, `curl`, `git`)**:
+                  - Gunakan `unzip -l` / `unzip -p` untuk memeriksa isi `.apk`, `.aar`, atau `.jar`.
+                  - Gunakan `curl -L` atau `git clone` untuk mengambil resource open-source, template web untuk `WebView`, atau library `.jar` langsung ke dalam proyek.
+                - **Sesi PTY Interaktif & Background Daemon (`terminal_start`)**:
+                  - Gunakan `terminal_start(engine="linux", distro="debian", pty=true)` ketika membutuhkan shell persisten yang mempertahankan state direktori/environment variables atau menjalankan proses background.
+            """.trimIndent(),
+
+            Triple(
+                "patent-rea-apk-cloner",
+                "Patent Skill: REA Reverse Engineering & Full APK Project Cloner",
+                "Metodologi paten Reverse Engineer Anything (REA) untuk membedah file APK yang dilampirkan pengguna dan meng-clone menjadi proyek Sketchware Pro utuh hingga terkompilasi."
+            ) to """
+                # Patent Skill: REA Reverse Engineering & Full APK Project Cloner
+
+                Gunakan skill paten ini setiap kali pengguna melampirkan file `.apk` (melalui `+ Add Context -> Tambahkan File APK`) atau meminta untuk melakukan reverse engineering / full clone APK ke proyek Sketchware Pro:
+
+                ## Tahap 1: Eksekusi Otomatis `reconstruct_apk_project(action="full_clone")`
+                1. Panggil `reconstruct_apk_project(action="full_clone", apk_path="<path_apk>")`.
+                2. Tool ini secara otomatis akan:
+                   - Membuat snapshot checkpoint proyek sebelum modifikasi.
+                   - Mendekode binary `AndroidManifest.xml` dan menyinkronkan seluruh `<uses-permission>`.
+                   - Mengekstrak & mendaftarkan seluruh `drawable` (`res/drawable*`, `res/mipmap*`), `assets/*`, dan `fonts/*` ke dalam proyek Sketchware.
+                   - Mendekompilasi seluruh layout binary `res/layout/*.xml`, mengadaptasi tag ke format `ViewBean` Sketchware, dan membuat layar Activity serta CustomView secara otomatis.
+                   - Menghasilkan dokumen **`rea_clone_blueprint.md`** di panel **📦 Artifacts**.
+
+                ## Tahap 2: Bedah Mendalam DEX Bytecode & Layout Asli
+                1. Baca laporan kelas DEX atau panggil `reconstruct_apk_project(action="analyze_dex", apk_path="<path_apk>", query="<NamaActivityAtauFitur>")` (atau `mcp__rea_mcp__rea_analyze_dex`).
+                2. Bila ingin memeriksa detail atribut asli dari layout tertentu sebelum diadaptasi, panggil `reconstruct_apk_project(action="decode_xml", apk_path="<path_apk>", xml_entry="res/layout/<nama>.xml")` atau baca dari `.sketchware/data/<sc_id>/files/rea_workspace/layouts/`.
+                3. Identifikasi untuk setiap Activity:
+                   - Daftar field (`SharedPreferences`, `RequestNetwork`, `ArrayList<HashMap>`, variabel state, adapter).
+                   - Daftar method & algoritma bisnis, endpoint URL API, atau skema tabel SQLite.
+
+                ## Tahap 3: Rekonstruksi Logika Penuh (`BlockBean` + `Custom Java`)
+                1. Untuk setiap Activity yang telah di-clone, daftarkan variabel (`manage_variable`), list (`manage_list`), dan komponen (`add_component`: `Intent`, `SharedPreferences`, `RequestNetwork`, `Dialog`, `Timer`, dll.).
+                2. Tulis blok logika di `onCreate_initializeLogic` (termasuk styling `GradientDrawable` agar tampilan identik dengan APK asli) serta seluruh event klik tombol/list menggunakan `write_event_logic`.
+                3. Jika APK asli memiliki class model/helper/adapter kustom di DEX, buat ulang class Java tersebut menggunakan `write_custom_java_file`.
+
+                ## Tahap 4: Verifikasi Kompilasi & Self-Healing (`save_and_verify_compile`)
+                1. Jalankan `save_and_verify_compile(full_apk_build=true)`.
+                2. Jika ada simbol/resource/variabel yang belum cocok, perbaiki secara otonom hingga proyek hasil clone menghasilkan **`BUILD SUKSES!`**.
+            """.trimIndent(),
+
             Triple(
                 "material-ui-architect",
                 "Material UI & Styling Architect",

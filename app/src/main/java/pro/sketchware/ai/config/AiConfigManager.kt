@@ -359,9 +359,13 @@ class AiConfigManager(context: Context) {
         get() = AgentAutonomyMode.fromName(prefs.getString(KEY_AUTONOMY_MODE, AgentAutonomyMode.AGENT.name))
         set(value) = prefs.edit().putString(KEY_AUTONOMY_MODE, value.name).apply()
 
+    var unlimitedSteps: Boolean
+        get() = prefs.getBoolean(KEY_UNLIMITED_STEPS, true)
+        set(value) = prefs.edit().putBoolean(KEY_UNLIMITED_STEPS, value).apply()
+
     var maxStepsPerRun: Int
-        get() = prefs.getInt(KEY_MAX_STEPS, 30).coerceIn(5, 100)
-        set(value) = prefs.edit().putInt(KEY_MAX_STEPS, value.coerceIn(5, 100)).apply()
+        get() = prefs.getInt(KEY_MAX_STEPS, 50).coerceIn(5, 1000)
+        set(value) = prefs.edit().putInt(KEY_MAX_STEPS, value.coerceIn(5, 1000)).apply()
 
     var autoBuildAndHeal: Boolean
         get() = prefs.getBoolean(KEY_AUTO_BUILD_HEAL, true)
@@ -396,6 +400,7 @@ class AiConfigManager(context: Context) {
         private const val KEY_SAVED_PROFILES = "saved_ai_profiles_json"
         private const val KEY_AGENT_LANGUAGE = "agent_language"
         private const val KEY_AUTONOMY_MODE = "autonomy_mode"
+        private const val KEY_UNLIMITED_STEPS = "unlimited_steps_per_run"
         private const val KEY_MAX_STEPS = "max_steps_per_run"
         private const val KEY_AUTO_BUILD_HEAL = "auto_build_and_heal"
         private const val KEY_AUTO_BACKUP = "auto_backup_before_run"

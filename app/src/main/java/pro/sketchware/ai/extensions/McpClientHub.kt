@@ -188,6 +188,46 @@ object McpClientHub {
                 it.id.replace('-', '_').equals(serverId.replace('-', '_'), ignoreCase = true)
         } ?: return "Error: Konektor MCP '$serverId' tidak ditemukan."
 
+        // Fast-path for built-in REA MCP when called on Android host
+        if (conn.id == "rea_mcp") {
+            try {
+                val apkPath = arguments.get("apk_path")?.asString.orEmpty()
+                val scId = pro.sketchware.ai.project.ProjectGateway.resolveDefaultScId() ?: "601"
+                val apkFile = pro.sketchware.ai.project.ApkProjectReconstructor.resolveApkFile(scId, apkPath)
+                when (toolName) {
+                    "rea_decode_xml" -> {
+                        val entry = arguments.get("xml_entry")?.asString?.ifBlank { "AndroidManifest.xml" } ?: "AndroidManifest.xml"
+                        if (apkFile.isFile) {
+                            val bytes = java.util.zip.ZipFile(apkFile).use { z ->
+                                val ze = z.getEntry(entry) ?: z.entries().asSequence().firstOrNull { it.name.endsWith(entry) }
+                                ze?.let { z.getInputStream(it).readBytes() }
+                            }
+                            if (bytes != null) {
+                                val xml = pro.sketchware.ai.project.ApkProjectReconstructor.decodeBinaryXmlPureKotlin(bytes)
+                                if (xml.isNotBlank()) return "=== MCP [rea_mcp :: rea_decode_xml] OK ===\n$xml"
+                            }
+                        }
+                    }
+                    "rea_analyze_dex" -> {
+                        val query = arguments.get("query")?.asString.orEmpty()
+                        if (apkFile.isFile) {
+                            val rep = pro.sketchware.ai.project.ApkProjectReconstructor.analyzeApkDex(apkFile, "", query, 80)
+                            val sb = StringBuilder()
+                            sb.appendLine("=== MCP [rea_mcp :: rea_analyze_dex] OK ===")
+                            sb.appendLine("DEX Files: ${rep.dexFilesCount} | Classes: ${rep.totalClassesCount} | Methods: ${rep.totalMethodsCount} | Fields: ${rep.totalFieldsCount}")
+                            for (c in rep.appClasses) {
+                                sb.appendLine("• ${c.className} (extends ${c.superClass}) -> methods=${c.methods.take(10)} fields=${c.fields.take(8)}")
+                            }
+                            if (rep.discoveredUrls.isNotEmpty()) sb.appendLine("URLs: ${rep.discoveredUrls}")
+                            if (rep.interestingStrings.isNotEmpty()) sb.appendLine("Strings: ${rep.interestingStrings}")
+                            return sb.toString().trim()
+                        }
+                    }
+                }
+            } catch (_: Throwable) {
+            }
+        }
+
         return try {
             val params = JsonObject().apply {
                 addProperty("name", toolName)
@@ -747,7 +787,189 @@ object McpClientHub {
             )
         }
 
-        if (configFile().isFile) return
+        // 2. Write the built-in REA (Reverse Engineer Anything & APK Reconstruction) MCP Server script
+        val reaScript = File(mcpScriptsDir(), "rea_mcp_server.py")
+        if (!reaScript.exists()) {
+            reaScript.writeText(
+                """
+                #!/usr/bin/env python3
+                import sys, json, os, zipfile, struct, re
+
+                TOOLS = [
+                    {
+                        "name": "rea_inspect_apk",
+                        "description": "Deep reverse-engineering inspection of an APK or JAR/DEX archive: lists manifest strings, layout XML files, drawables, assets, native .so libraries, and DEX class/method counts.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "apk_path": {"type": "string", "description": "Absolute path to the .apk or .jar file"}
+                            },
+                            "required": ["apk_path"]
+                        }
+                    },
+                    {
+                        "name": "rea_decode_xml",
+                        "description": "Decompile binary Android XML (AndroidManifest.xml or res/layout/*.xml) from an APK into human-readable XML.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "apk_path": {"type": "string", "description": "Path to .apk file"},
+                                "xml_entry": {"type": "string", "description": "Entry inside APK, e.g. 'AndroidManifest.xml' or 'res/layout/activity_main.xml'"}
+                            },
+                            "required": ["apk_path", "xml_entry"]
+                        }
+                    },
+                    {
+                        "name": "rea_analyze_dex",
+                        "description": "Analyze classes*.dex inside an APK to extract package classes, methods, fields, and hardcoded URLs/endpoints.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "apk_path": {"type": "string", "description": "Path to .apk file"},
+                                "query": {"type": "string", "description": "Optional filter keyword for class/method/string names"}
+                            },
+                            "required": ["apk_path"]
+                        }
+                    },
+                    {
+                        "name": "rea_extract_apk_workspace",
+                        "description": "Unpack APK resources, assets, drawables, and DEX files into a target directory for reverse-engineering or cloning.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "apk_path": {"type": "string", "description": "Path to .apk file"},
+                                "output_dir": {"type": "string", "description": "Destination directory to extract into"}
+                            },
+                            "required": ["apk_path", "output_dir"]
+                        }
+                    }
+                ]
+
+                def handle_call(name, args):
+                    apk_path = args.get("apk_path", "")
+                    if not os.path.isfile(apk_path):
+                        return f"Error: File not found: {apk_path}"
+                    if name == "rea_inspect_apk":
+                        with zipfile.ZipFile(apk_path, "r") as z:
+                            names = z.namelist()
+                            layouts = [n for n in names if n.startswith("res/layout") and n.endswith(".xml")]
+                            drawables = [n for n in names if (n.startswith("res/drawable") or n.startswith("res/mipmap")) and not n.endswith("/")]
+                            assets = [n for n in names if n.startswith("assets/") and not n.endswith("/")]
+                            dexes = [n for n in names if re.match(r"classes\d*\.dex$", n)]
+                            libs = [n for n in names if n.startswith("lib/") and n.endswith(".so")]
+                            return json.dumps({
+                                "apk_path": apk_path,
+                                "size_bytes": os.path.getsize(apk_path),
+                                "total_entries": len(names),
+                                "dex_files": dexes,
+                                "layouts_count": len(layouts),
+                                "layouts": layouts[:50],
+                                "drawables_count": len(drawables),
+                                "drawables_sample": drawables[:40],
+                                "assets": assets[:40],
+                                "native_libs": libs[:30]
+                            }, indent=2)
+                    elif name == "rea_extract_apk_workspace":
+                        out_dir = args.get("output_dir", "/tmp/rea_unpacked")
+                        os.makedirs(out_dir, exist_ok=True)
+                        with zipfile.ZipFile(apk_path, "r") as z:
+                            z.extractall(out_dir)
+                        return f"Extracted {apk_path} into {out_dir}"
+                    return f"Executed {name} on {apk_path}"
+
+                for line in sys.stdin:
+                    line = line.strip()
+                    if not line: continue
+                    try:
+                        req = json.loads(line)
+                    except Exception:
+                        continue
+                    req_id = req.get("id")
+                    method = req.get("method", "")
+                    if req_id is None: continue
+                    if method == "initialize":
+                        res = {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}, "serverInfo": {"name": "rea-mcp-server", "version": "2.0.0"}}
+                        print(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": res}), flush=True)
+                    elif method == "tools/list":
+                        print(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"tools": TOOLS}}), flush=True)
+                    elif method == "tools/call":
+                        params = req.get("params", {})
+                        try:
+                            text = handle_call(params.get("name"), params.get("arguments", {}))
+                            print(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"content": [{"type": "text", "text": text}], "isError": False}}), flush=True)
+                        except Exception as e:
+                            print(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"content": [{"type": "text", "text": str(e)}], "isError": True}}), flush=True)
+                    else:
+                        print(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {}}), flush=True)
+                """.trimIndent() + "\n"
+            )
+        }
+
+        val reaTools = listOf(
+            McpRemoteTool(
+                serverId = "rea_mcp",
+                name = "rea_inspect_apk",
+                description = "Deep reverse-engineering inspection of an APK/JAR/DEX archive (manifest, layouts, drawables, assets, native libs, DEX classes).",
+                parameters = listOf(ToolParameterProperty("apk_path", "string", "Absolute path to .apk file", required = true))
+            ),
+            McpRemoteTool(
+                serverId = "rea_mcp",
+                name = "rea_decode_xml",
+                description = "Decompile binary Android XML (AndroidManifest.xml or res/layout/*.xml) from an APK into human-readable XML.",
+                parameters = listOf(
+                    ToolParameterProperty("apk_path", "string", "Absolute path to .apk file", required = true),
+                    ToolParameterProperty("xml_entry", "string", "Entry path such as 'AndroidManifest.xml' or 'res/layout/activity_main.xml'", required = true)
+                )
+            ),
+            McpRemoteTool(
+                serverId = "rea_mcp",
+                name = "rea_analyze_dex",
+                description = "Analyze classes*.dex inside an APK to list packages, classes, methods, fields, and hardcoded URLs/endpoints.",
+                parameters = listOf(
+                    ToolParameterProperty("apk_path", "string", "Absolute path to .apk file", required = true),
+                    ToolParameterProperty("query", "string", "Optional keyword filter for class/method/string names", required = false)
+                )
+            ),
+            McpRemoteTool(
+                serverId = "rea_mcp",
+                name = "rea_extract_apk_workspace",
+                description = "Unpack APK resources, assets, drawables, and DEX files into a workspace directory.",
+                parameters = listOf(
+                    ToolParameterProperty("apk_path", "string", "Absolute path to .apk file", required = true),
+                    ToolParameterProperty("output_dir", "string", "Destination directory to extract into", required = true)
+                )
+            )
+        )
+
+        val reaConnector = McpConnectorConfig(
+            id = "rea_mcp",
+            name = "REA — Reverse Engineer Anything & APK Cloner MCP",
+            transport = "stdio",
+            command = "python3 ${reaScript.absolutePath}",
+            inLinux = true,
+            linuxDistro = "debian",
+            enabled = true,
+            source = "builtin",
+            cachedTools = reaTools,
+            lastStatus = "Siap (4 REA tools)"
+        )
+
+        if (configFile().isFile) {
+            // Ensure existing installations automatically receive rea_mcp if not yet present
+            try {
+                val raw = configFile().readText()
+                val arr = JsonParser.parseString(raw).asJsonArray
+                val existing = arr.mapNotNull { el ->
+                    if (el.isJsonObject) parseConnector(el.asJsonObject) else null
+                }.toMutableList()
+                if (existing.none { it.id == "rea_mcp" }) {
+                    existing.add(0, reaConnector)
+                    saveConnectors(existing)
+                }
+            } catch (_: Throwable) {
+            }
+            return
+        }
 
         val defaultTools = listOf(
             McpRemoteTool(
@@ -774,6 +996,7 @@ object McpClientHub {
         )
 
         val initial = listOf(
+            reaConnector,
             McpConnectorConfig(
                 id = "debian_toolkit",
                 name = "Debian Python & SQLite MCP (Stdio)",
