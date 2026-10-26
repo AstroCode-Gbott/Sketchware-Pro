@@ -190,7 +190,8 @@ public class Fx {
         ArrayList<String> params = new ArrayList<>();
         ArrayList<String> paramsTypes = extractParamsTypes(bean.spec);
         for (int i = 0; i < bean.parameters.size(); i++) {
-            String param = getParamValue(bean.parameters.get(i), paramsTypes.get(i));
+            String paramType = i < paramsTypes.size() ? paramsTypes.get(i) : "";
+            String param = getParamValue(bean.parameters.get(i), paramType);
             int type = getBlockType(bean, i);
             params.add(a(param, type, bean.opCode));
         }
@@ -241,25 +242,53 @@ public class Fx {
         String opcode = "";
         switch (bean.opCode) {
             case "definedFunc":
-                int space = bean.spec.indexOf(" ");
+                String rawSpec = bean.spec != null ? bean.spec.trim() : "";
+                boolean specIsPlaceholderOnly = rawSpec.isEmpty() || rawSpec.startsWith("%");
                 if (bean.parameters.isEmpty()) {
+                    int space = rawSpec.indexOf(" ");
+                    String fnName = space < 0 ? rawSpec : rawSpec.substring(0, space);
                     opcode = bean.type;
-                    moreBlock = "_" + (space < 0 ? bean.spec : bean.spec.substring(0, space)) + "()" + ReturnMoreblockManager.getMbEnd(bean.type);
+                    moreBlock = "_" + fnName + "()" + ReturnMoreblockManager.getMbEnd(bean.type);
+                } else if (specIsPlaceholderOnly) {
+                    // Fallback for blocks compiled with spec="%s" where parameter[0] holds the MoreBlock name/spec
+                    String firstParam = bean.parameters.get(0) != null ? bean.parameters.get(0).trim() : "";
+                    int space = firstParam.indexOf(" ");
+                    String fnName = space < 0 ? firstParam : firstParam.substring(0, space);
+                    if (params.size() <= 1) {
+                        opcode = bean.type;
+                        moreBlock = "_" + fnName + "()" + ReturnMoreblockManager.getMbEnd(bean.type);
+                    } else {
+                        ArrayList<String> paramsTypes = extractParamsTypes(firstParam);
+                        StringBuilder callSb = new StringBuilder("_").append(fnName).append("(");
+                        for (int i = 1; i < params.size(); i++) {
+                            if (i > 1) callSb.append(", ");
+                            int typeIdx = i - 1;
+                            String paramType = (paramsTypes != null && typeIdx < paramsTypes.size()) ? paramsTypes.get(typeIdx) : "%s";
+                            String param = getParamValue(params.get(i), paramType);
+                            callSb.append(param.isEmpty() ? "\"\"" : param);
+                        }
+                        opcode = callSb.toString();
+                        moreBlock = opcode + ")" + ReturnMoreblockManager.getMbEnd(bean.type);
+                    }
                 } else {
-                    ArrayList<String> paramsTypes = extractParamsTypes(bean.spec);
-                    opcode = "_" + bean.spec.substring(0, space) + "(";
+                    int space = rawSpec.indexOf(" ");
+                    String fnName = space < 0 ? rawSpec : rawSpec.substring(0, space);
+                    ArrayList<String> paramsTypes = extractParamsTypes(rawSpec);
+                    opcode = "_" + fnName + "(";
                     boolean hasStringParam = false;
 
                     for (int i = 0; i < params.size(); i++) {
                         if (i > 0) opcode += ", ";
-                        String param = getParamValue(params.get(i), paramsTypes.get(i));
+                        String paramType = (paramsTypes != null && i < paramsTypes.size()) ? paramsTypes.get(i) : "";
+                        String param = getParamValue(params.get(i), paramType);
                         if (param.isEmpty()) {
-                            Gx paramInfo = bean.getParamClassInfo().get(i);
-                            if (paramInfo.b("boolean")) {
+                            ArrayList<Gx> pci = bean.getParamClassInfo();
+                            Gx paramInfo = (pci != null && i < pci.size()) ? pci.get(i) : null;
+                            if (paramInfo != null && paramInfo.b("boolean")) {
                                 opcode += "true";
-                            } else if (paramInfo.b("double")) {
+                            } else if (paramInfo != null && paramInfo.b("double")) {
                                 opcode += "0";
-                            } else if (paramInfo.b("String")) {
+                            } else if (paramInfo != null && paramInfo.b("String")) {
                                 hasStringParam = true;
                             }
                         } else {
@@ -1436,7 +1465,8 @@ public class Fx {
         ArrayList<String> paramsTypes = extractParamsTypes(blockBean.spec);
 
         for (int i = 0; i < blockBean.parameters.size(); i++) {
-            String parameterValue = getParamValue(blockBean.parameters.get(i), paramsTypes.get(i));
+            String paramType = (paramsTypes != null && i < paramsTypes.size()) ? paramsTypes.get(i) : "";
+            String parameterValue = getParamValue(blockBean.parameters.get(i), paramType);
 
             switch (getBlockType(blockBean, i)) {
                 case 0:
@@ -1505,20 +1535,20 @@ public class Fx {
     }
 
     private int getBlockType(BlockBean blockBean, int parameterIndex) {
-        int blockType;
-
-        Gx paramClassInfo = blockBean.getParamClassInfo().get(parameterIndex);
-
-        if (paramClassInfo.b("boolean")) {
-            blockType = 0;
-        } else if (paramClassInfo.b("double")) {
-            blockType = 1;
-        } else if (paramClassInfo.b("String")) {
-            blockType = 2;
-        } else {
-            blockType = 3;
+        ArrayList<Gx> paramClassInfoList = blockBean.getParamClassInfo();
+        if (paramClassInfoList == null || parameterIndex >= paramClassInfoList.size()) {
+            return 3;
         }
 
-        return blockType;
+        Gx paramClassInfo = paramClassInfoList.get(parameterIndex);
+        if (paramClassInfo.b("boolean")) {
+            return 0;
+        } else if (paramClassInfo.b("double")) {
+            return 1;
+        } else if (paramClassInfo.b("String")) {
+            return 2;
+        } else {
+            return 3;
+        }
     }
 }

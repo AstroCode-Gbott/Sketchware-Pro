@@ -48,6 +48,8 @@ stringfogXor = "5.0.0"
 apksig = "9.4.1"
 conscrypt = "2.7.0"
 androidsvg = "1.4"
+junit = "4.13.2"
+xz = "1.10"
 
 [libraries]
 androidx-activity = { module = "androidx.activity:activity", version.ref = "activity" }
@@ -122,6 +124,8 @@ stringfog-xor = { module = "com.github.megatronking.stringfog:xor", version.ref 
 apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
 conscrypt-android = { module = "org.conscrypt:conscrypt-android", version.ref = "conscrypt" }
 androidsvg = { module = "com.caverock:androidsvg-aar", version.ref = "androidsvg" }
+junit = { module = "junit:junit", version.ref = "junit" }
+xz = { module = "org.tukaani:xz", version.ref = "xz" }
 
 [bundles]
 ui = ["androidx-activity", "androidx-appcompat", "androidx-splashscreen", "androidx-recyclerview",

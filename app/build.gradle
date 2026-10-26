@@ -6,6 +6,7 @@ apply plugin: "com.google.firebase.crashlytics"
 
 android {
     compileSdk = 37
+    ndkVersion = "29.0.14206865"
 
     def gitCommitHash = "git rev-parse HEAD".execute().text.trim()
     def shortCommitHash = "git rev-parse --short HEAD".execute().text.trim()
@@ -22,6 +23,10 @@ android {
         buildConfigField("String", "GIT_HASH", "\"${gitCommitHash}\"")
 
         buildConfigField("String", "SKETCHUB_API_KEY", "\"${System.getenv("SKETCHUB_API_KEY")}\"")
+
+        ndk {
+            abiFilters += ["arm64-v8a", "armeabi-v7a", "x86_64"]
+        }
     }
 
     buildTypes {
@@ -60,6 +65,12 @@ android {
     buildFeatures {
         viewBinding = true
         buildConfig = true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
     }
 
 
@@ -113,6 +124,9 @@ dependencies {
     implementation libs.markwon
 
     implementation libs.bundles.networking
+    implementation libs.xz
+
+    testImplementation libs.junit
 
     implementation libs.ecj
 

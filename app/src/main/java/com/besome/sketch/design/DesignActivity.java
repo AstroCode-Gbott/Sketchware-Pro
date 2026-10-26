@@ -126,6 +126,10 @@ import pro.sketchware.activities.resourceseditor.ResourcesEditorActivity;
 import pro.sketchware.databinding.DesignBinding;
 import pro.sketchware.databinding.FileSelectorPopupSelectJavaBinding;
 import pro.sketchware.dialogs.BuildSettingsBottomSheet;
+import pro.sketchware.ai.agent.AgentOrchestrator;
+import pro.sketchware.ai.project.ProjectGateway;
+import pro.sketchware.ai.ui.AiAgentStudioSheet;
+import pro.sketchware.ai.ui.TerminalScreen;
 import pro.sketchware.utility.FileUtil;
 import pro.sketchware.utility.SketchwareUtil;
 import pro.sketchware.utility.ThemeUtils;
@@ -500,6 +504,10 @@ public class DesignActivity extends BaseAppCompatActivity implements View.OnClic
 
         bottomPopupMenu = new PopupMenu(this, btnOptions);
         bottomMenu = bottomPopupMenu.getMenu();
+        bottomMenu.add(Menu.NONE, 8, Menu.NONE, "AI Agent Studio (0→APK)").setOnMenuItemClickListener(item -> {
+            toAiAgentStudio();
+            return true;
+        });
         bottomMenu.add(Menu.NONE, 1, Menu.NONE, "Build Settings").setOnMenuItemClickListener(item -> {
             BuildSettingsBottomSheet sheet = BuildSettingsBottomSheet.newInstance(sc_id);
             sheet.show(getSupportFragmentManager(), BuildSettingsBottomSheet.TAG);
@@ -602,6 +610,30 @@ public class DesignActivity extends BaseAppCompatActivity implements View.OnClic
         }
 
         fProgress = new FloatingProgressWindow();
+
+        ProjectGateway.INSTANCE.setActiveScId(sc_id);
+        ProjectGateway.INSTANCE.setUiBridge(new ProjectGateway.UiBridge() {
+            @Override
+            public void onProjectDataChanged(@NonNull String changedScId, String activeXmlOrJava) {
+                if (changedScId.equals(sc_id) && !isFinishing() && !isDestroyed()) {
+                    if (viewTabAdapter != null) {
+                        viewTabAdapter.i();
+                    }
+                    refreshViewTabAdapter();
+                    refreshEventTabAdapter();
+                    refreshComponentTabAdapter();
+                    refreshFileSelector();
+                }
+            }
+
+            @Override
+            public void onSwitchToScreen(@NonNull String changedScId, @NonNull ProjectFileBean projectFileBean) {
+                if (changedScId.equals(sc_id) && !isFinishing() && !isDestroyed()) {
+                    projectFile = projectFileBean;
+                    refresh();
+                }
+            }
+        });
     }
 
     private boolean isDebugApkExists() {
@@ -624,6 +656,7 @@ public class DesignActivity extends BaseAppCompatActivity implements View.OnClic
 
     @Override
     public void onDestroy() {
+        ProjectGateway.INSTANCE.setUiBridge(null);
         super.onDestroy();
         unregisterReceiver(buildCancelReceiver);
         fProgress.exit();
@@ -1049,6 +1082,27 @@ public class DesignActivity extends BaseAppCompatActivity implements View.OnClic
         launchActivity(ManageXMLCommandActivity.class, null);
     }
 
+    /**
+     * Opens {@link AiAgentStudioSheet}.
+     */
+    public void toAiAgentStudio() {
+        if (drawer != null && drawer.isDrawerOpen(GravityCompat.END)) {
+            drawer.closeDrawer(GravityCompat.END);
+        }
+        String activeScreen = fileName != null ? Helper.getText(fileName) : "main.xml";
+        AiAgentStudioSheet.show(this, sc_id, activeScreen);
+    }
+
+    /**
+     * Opens the interactive {@link TerminalScreen} (host / Linux / root shell sessions).
+     */
+    public void toTerminal() {
+        if (drawer != null && drawer.isDrawerOpen(GravityCompat.END)) {
+            drawer.closeDrawer(GravityCompat.END);
+        }
+        TerminalScreen.show(this, sc_id);
+    }
+
     @SafeVarargs
     private void launchActivity(Class<? extends Activity> toLaunch, ActivityResultLauncher<Intent> optionalLauncher, Pair<String, String>... extras) {
         Intent intent = new Intent(getApplicationContext(), toLaunch);
@@ -1430,6 +1484,21 @@ public class DesignActivity extends BaseAppCompatActivity implements View.OnClic
                     activity.h();
                     if (savedInstanceState == null) {
                         activity.checkForUnsavedProjectData();
+                        Intent launchIntent = activity.getIntent();
+                        if (launchIntent != null && launchIntent.getBooleanExtra("open_ai_studio", false)) {
+                            launchIntent.removeExtra("open_ai_studio");
+                            String initialPrompt = launchIntent.getStringExtra("ai_initial_prompt");
+                            launchIntent.removeExtra("ai_initial_prompt");
+                            activity.toAiAgentStudio();
+                            if (initialPrompt != null && !initialPrompt.trim().isEmpty()) {
+                                AgentOrchestrator.INSTANCE.startUserTask(
+                                        activity,
+                                        sc_id,
+                                        initialPrompt,
+                                        "main.xml"
+                                );
+                            }
+                        }
                     }
                 });
             }

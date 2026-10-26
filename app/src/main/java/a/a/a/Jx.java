@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import mod.agus.jcoderz.beans.ViewBeans;
@@ -624,8 +625,34 @@ public class Jx {
 
     private String getComponentDeclarationAndAddImports(ComponentBean componentBean) {
         String typeName = mq.a(componentBean.type);
+        if (typeName == null || typeName.trim().isEmpty()) {
+            typeName = inferMissingComponentType(componentBean.componentId);
+        }
         addImports(mq.getImportsByTypeName(projectDataManager.a, typeName, null));
         return Lx.a(typeName, componentBean.componentId, Lx.AccessModifier.PRIVATE, componentBean.param1, componentBean.param2, componentBean.param3);
+    }
+
+    private String inferMissingComponentType(String componentId) {
+        if (componentId == null || componentId.trim().isEmpty()) return "Object";
+        Pattern assignPattern = Pattern.compile("\\b" + Pattern.quote(componentId.trim()) + "\\s*=\\s*new\\s+([a-zA-Z0-9_.$]+)");
+        for (Map.Entry<String, ArrayList<BlockBean>> entry : projectDataManager.b(projectFileBean.getJavaName()).entrySet()) {
+            ArrayList<BlockBean> blocks = entry.getValue();
+            if (blocks == null) continue;
+            for (BlockBean b : blocks) {
+                if (b.parameters == null) continue;
+                for (String p : b.parameters) {
+                    if (p == null) continue;
+                    Matcher m = assignPattern.matcher(p);
+                    if (m.find()) {
+                        return m.group(1);
+                    }
+                }
+            }
+        }
+        if (componentId.equals("bs") || componentId.toLowerCase().contains("bottomsheet")) {
+            return "com.google.android.material.bottomsheet.BottomSheetDialog";
+        }
+        return "Object";
     }
 
     private String getDrawerViewDeclarationAndAddImports(ViewBean viewBean) {

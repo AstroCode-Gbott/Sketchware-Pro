@@ -10,6 +10,9 @@ import androidx.annotation.NonNull;
 
 import com.besome.sketch.tools.CollectErrorActivity;
 
+import pro.sketchware.ai.agent.AgentMemoryStore;
+import pro.sketchware.ai.mcp.SketchwareMcpServer;
+import pro.sketchware.ai.shell.LinuxSubsystem;
 import pro.sketchware.utility.AnalyticsHelper;
 import pro.sketchware.utility.theme.ThemeManager;
 
@@ -37,5 +40,8 @@ public class SketchApplication extends Application {
         super.onCreate();
         ThemeManager.applyTheme(this, ThemeManager.getCurrentTheme(this));
         AnalyticsHelper.logDeviceAbi(this);
+        AgentMemoryStore.init(this);
+        LinuxSubsystem.init(this);
+        SketchwareMcpServer.ensureStarted(this);
     }
 }

@@ -613,7 +613,8 @@ public class Lx {
                                 fieldDeclaration += " RewardedAd " + typeInstanceName + ";";
                                 break;
                             default:
-                                fieldDeclaration += " " + typeName + " " + typeInstanceName + ";";
+                                String safeType = (typeName == null || typeName.trim().isEmpty()) ? "Object" : typeName;
+                                fieldDeclaration += " " + safeType + " " + typeInstanceName + ";";
                                 break;
                         }
                     }

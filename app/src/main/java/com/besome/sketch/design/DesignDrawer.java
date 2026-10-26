@@ -31,13 +31,20 @@ import pro.sketchware.utility.ThemeUtils;
 import pro.sketchware.utility.UI;
 
 public class DesignDrawer extends LinearLayout {
+    private static final int ITEM_AI_AGENT_STUDIO = View.generateViewId();
+    private static final int ITEM_TERMINAL = View.generateViewId();
+
     @SuppressLint("NonConstantResourceId")
     private final View.OnClickListener drawerItemClickListener = v -> {
         Activity activity = (Activity) getContext();
         if (!(activity instanceof DesignActivity designActivity)) return;
         int id = v.getId();
 
-        if (id == R.id.item_library_manager) {
+        if (id == ITEM_AI_AGENT_STUDIO) {
+            designActivity.toAiAgentStudio();
+        } else if (id == ITEM_TERMINAL) {
+            designActivity.toTerminal();
+        } else if (id == R.id.item_library_manager) {
             designActivity.toLibraryManager();
         } else if (id == R.id.item_view_manager) {
             designActivity.toViewManager();
@@ -116,6 +123,15 @@ public class DesignDrawer extends LinearLayout {
         UI.addSystemWindowInsetToPadding(this, false, false, true, false);
 
         addDrawerSubheaderItem(R.string.design_drawer_menu_title, content);
+        DrawerItem aiStudioItem = new DrawerItem(getContext());
+        aiStudioItem.setContent(R.drawable.ic_mtrl_code, "AI Agent Studio", "Bangun aplikasi dari 0 & edit proyek secara otonom");
+        aiStudioItem.setOnClickListener(ITEM_AI_AGENT_STUDIO, drawerItemClickListener);
+        content.addView(aiStudioItem);
+        DrawerItem terminalItem = new DrawerItem(getContext());
+        terminalItem.setContent(R.drawable.ic_mtrl_terminal, "Terminal Agent", "Shell interaktif (host / Linux / root) untuk agent");
+        terminalItem.setOnClickListener(ITEM_TERMINAL, drawerItemClickListener);
+        content.addView(terminalItem);
+        addDrawerDivider(content);
         addDrawerItem(R.id.item_library_manager, R.drawable.ic_mtrl_category, R.string.design_drawer_menu_title_library, R.string.design_drawer_menu_description_library, content);
         addDrawerItem(R.id.item_view_manager, R.drawable.ic_mtrl_devices, R.string.design_drawer_menu_title_view, R.string.design_drawer_menu_description_view, content);
         addDrawerItem(R.id.item_image_manager, R.drawable.ic_mtrl_image, R.string.design_drawer_menu_title_image, R.string.design_drawer_menu_description_image, content);

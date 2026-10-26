@@ -49,6 +49,9 @@ import mod.hey.studios.project.ProjectTracker;
 import mod.hey.studios.project.backup.BackupRestoreManager;
 import pro.sketchware.R;
 import pro.sketchware.activities.main.activities.MainActivity;
+import pro.sketchware.ai.mcp.SketchwareMcpServer;
+import pro.sketchware.ai.project.ProjectGateway;
+import pro.sketchware.ai.ui.AiAgentStudioSheet;
 import pro.sketchware.databinding.MyprojectsBinding;
 import pro.sketchware.databinding.SortProjectDialogBinding;
 import pro.sketchware.utility.UI;
@@ -137,15 +140,22 @@ public class ProjectsFragment extends DA {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        ProjectGateway.INSTANCE.setProjectsListBridge(null);
         binding = null; // avoid memory leaks
     }
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         preference = new DB(requireContext(), "project");
+        SketchwareMcpServer.ensureStarted(requireContext());
+        ProjectGateway.INSTANCE.setProjectsListBridge(this::addProject);
 
         ExtendedFloatingActionButton fab = requireActivity().findViewById(R.id.create_new_project);
         fab.setOnClickListener((v) -> toProjectSettingsActivity());
+        fab.setOnLongClickListener((v) -> {
+            AiAgentStudioSheet.showCreateAppFromZeroDialog(requireActivity(), this::addProject);
+            return true;
+        });
         Insetter.builder().margin(WindowInsetsCompat.Type.navigationBars()).applyToView(fab);
 
         binding.swipeRefresh.setOnRefreshListener(this::refreshProjectsList);
@@ -172,9 +182,14 @@ public class ProjectsFragment extends DA {
         binding.specialAction.getRoot().setOnClickListener(v -> restoreProject());
 
         menuProvider = new MenuProvider() {
+            private static final int MENU_AI_AGENT_ZERO = 9901;
+
             @Override
             public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
                 menuInflater.inflate(R.menu.projects_fragment_menu, menu);
+                MenuItem aiItem = menu.add(Menu.NONE, MENU_AI_AGENT_ZERO, Menu.NONE, "Bangun dari 0 (AI Agent)");
+                aiItem.setIcon(R.drawable.ic_mtrl_code);
+                aiItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
                 projectsSearchView = (SearchView) menu.findItem(R.id.searchProjects).getActionView();
                 if (projectsSearchView != null) {
                     projectsSearchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
@@ -197,6 +212,10 @@ public class ProjectsFragment extends DA {
 
             @Override
             public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
+                if (menuItem.getItemId() == MENU_AI_AGENT_ZERO) {
+                    AiAgentStudioSheet.showCreateAppFromZeroDialog(requireActivity(), ProjectsFragment.this::addProject);
+                    return true;
+                }
                 return false;
             }
         };
