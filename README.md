@@ -9,17 +9,17 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nikmatnyata03-beep/Sketchware-Pro/actions/workflows/android.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/nikmatnyata03-beep/Sketchware-Pro/android.yml?branch=main&label=Auto%20Compile%20APK&logo=githubactions" alt="Auto Compile APK Status" />
+  <a href="https://github.com/GeekJaack/Sketchware-Pro/actions/workflows/android.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/GeekJaack/Sketchware-Pro/android.yml?branch=main&label=Auto%20Compile%20APK&logo=githubactions" alt="Auto Compile APK Status" />
   </a>
-  <a href="https://github.com/nikmatnyata03-beep/Sketchware-Pro/releases/latest">
-    <img src="https://img.shields.io/github/v/release/nikmatnyata03-beep/Sketchware-Pro?label=Latest%20APK&logo=android&color=2ea44f" alt="Latest Release" />
+  <a href="https://github.com/GeekJaack/Sketchware-Pro/releases/latest">
+    <img src="https://img.shields.io/github/v/release/GeekJaack/Sketchware-Pro?label=Latest%20APK&logo=android&color=2ea44f" alt="Latest Release" />
   </a>
-  <a href="https://github.com/nikmatnyata03-beep/Sketchware-Pro/releases">
-    <img src="https://img.shields.io/github/downloads/nikmatnyata03-beep/Sketchware-Pro/total?label=APK%20Downloads&logo=github" alt="Total Downloads" />
+  <a href="https://github.com/GeekJaack/Sketchware-Pro/releases">
+    <img src="https://img.shields.io/github/downloads/GeekJaack/Sketchware-Pro/total?label=APK%20Downloads&logo=github" alt="Total Downloads" />
   </a>
-  <a href="https://github.com/nikmatnyata03-beep/Sketchware-Pro/commits/main">
-    <img src="https://img.shields.io/github/last-commit/nikmatnyata03-beep/Sketchware-Pro?logo=git" alt="Last Commit" />
+  <a href="https://github.com/GeekJaack/Sketchware-Pro/commits/main">
+    <img src="https://img.shields.io/github/last-commit/GeekJaack/Sketchware-Pro?logo=git" alt="Last Commit" />
   </a>
 </p>
 
@@ -30,14 +30,14 @@
 File APK dikompilasi secara otomatis oleh **GitHub Actions** setiap kali ada pembaruan kode dan dipublikasikan langsung ke **GitHub Releases**:
 
 <p align="center">
-  <a href="https://github.com/nikmatnyata03-beep/Sketchware-Pro/releases/download/v7.0.0-ai-agent/Sketchware_Pro_AI_Agent.apk">
+  <a href="https://github.com/GeekJaack/Sketchware-Pro/releases/download/v7.0.0-ai-agent/Sketchware_Pro_AI_Agent.apk">
     <img src="https://img.shields.io/badge/⬇️_Download_APK_Terbaru-Sketchware__Pro__AI__Agent.apk-2ea44f?style=for-the-badge&logo=android&logoColor=white" alt="Download Sketchware_Pro_AI_Agent.apk" />
   </a>
 </p>
 
-- **Direct Download (Latest Release):** [`Sketchware_Pro_AI_Agent.apk`](https://github.com/nikmatnyata03-beep/Sketchware-Pro/releases/download/v7.0.0-ai-agent/Sketchware_Pro_AI_Agent.apk)
-- **Halaman Semua Rilis:** [GitHub Releases](https://github.com/nikmatnyata03-beep/Sketchware-Pro/releases)
-- **Build Artifacts (CI/CD):** [GitHub Actions Runs](https://github.com/nikmatnyata03-beep/Sketchware-Pro/actions/workflows/android.yml)
+- **Direct Download (Latest Release):** [`Sketchware_Pro_AI_Agent.apk`](https://github.com/GeekJaack/Sketchware-Pro/releases/download/v7.0.0-ai-agent/Sketchware_Pro_AI_Agent.apk)
+- **Halaman Semua Rilis:** [GitHub Releases](https://github.com/GeekJaack/Sketchware-Pro/releases)
+- **Build Artifacts (CI/CD):** [GitHub Actions Runs](https://github.com/GeekJaack/Sketchware-Pro/actions/workflows/android.yml)
 
 ---
 
@@ -135,7 +135,7 @@ app/src/main/
 ### B. Build secara Lokal via Gradle
 Pastikan Anda memiliki **JDK 21** dan **Android SDK (API 35 + NDK)**:
 ```bash
-git clone https://github.com/nikmatnyata03-beep/Sketchware-Pro.git
+git clone https://github.com/GeekJaack/Sketchware-Pro.git
 cd Sketchware-Pro
 
 # Jalankan Unit Tests & Build Debug APK
