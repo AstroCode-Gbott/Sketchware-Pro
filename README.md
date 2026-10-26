@@ -5,7 +5,7 @@
 <h1 align="center">Sketchware Pro — AI Agent Studio Edition</h1>
 
 <p align="center">
-  <b>Open-Source Autonomous Android App Development IDE with Embedded AI Agent Harness, Linux/Debian Terminal, MCP Server & Client, and Self-Healing Compiler</b>
+  <b>Open-source autonomous Android application development IDE featuring an embedded AI agent harness, Linux PRoot terminal, MCP server and client, and self-healing compiler pipeline.</b>
 </p>
 
 <p align="center">
@@ -25,119 +25,128 @@
 
 ---
 
-## 📥 Download APK (Siap Pakai)
+## Download Prebuilt APK
 
-File APK dikompilasi secara otomatis oleh **GitHub Actions** setiap kali ada pembaruan kode dan dipublikasikan langsung ke **GitHub Releases**:
+Application packages are compiled automatically by GitHub Actions on every commit to `main` and published to GitHub Releases:
 
 <p align="center">
   <a href="https://github.com/GeekJaack/Sketchware-Pro/releases/download/v7.0.0-ai-agent/Sketchware_Pro_AI_Agent.apk">
-    <img src="https://img.shields.io/badge/⬇️_Download_APK_Terbaru-Sketchware__Pro__AI__Agent.apk-2ea44f?style=for-the-badge&logo=android&logoColor=white" alt="Download Sketchware_Pro_AI_Agent.apk" />
+    <img src="https://img.shields.io/badge/Download_APK-v7.0.0--ai--agent-brightgreen?style=for-the-badge&logo=android&logoColor=white" alt="Download APK" />
   </a>
 </p>
 
 - **Direct Download (Latest Release):** [`Sketchware_Pro_AI_Agent.apk`](https://github.com/GeekJaack/Sketchware-Pro/releases/download/v7.0.0-ai-agent/Sketchware_Pro_AI_Agent.apk)
-- **Halaman Semua Rilis:** [GitHub Releases](https://github.com/GeekJaack/Sketchware-Pro/releases)
-- **Build Artifacts (CI/CD):** [GitHub Actions Runs](https://github.com/GeekJaack/Sketchware-Pro/actions/workflows/android.yml)
+- **All Releases:** [GitHub Releases](https://github.com/GeekJaack/Sketchware-Pro/releases)
+- **Build Artifacts (CI/CD):** [GitHub Actions Workflow Runs](https://github.com/GeekJaack/Sketchware-Pro/actions/workflows/android.yml)
 
 ---
 
-## ✨ Fitur Utama AI Agent Studio
+## Key Capabilities
 
-Edisi ini mengintegrasikan **AI Agent Studio** setara *Claude Code / Antigravity / OpenCode* langsung ke dalam IDE **Sketchware Pro** di perangkat Android Anda:
+This release embeds a complete autonomous agent development environment directly inside the Sketchware Pro Android IDE:
 
-### 1. 🤖 5 Mode Otonomi Agen
-- **Ask**: Tanya jawab & inspeksi kode/arsitektur proyek (*Read-only*).
-- **Copilot**: Bantu mengedit tampilan (*View*) dan *Event* pada layar yang sedang dibuka.
-- **Agent**: Eksekusi *multi-step* lintas layar, komponen, *Custom View*, dan logika blok.
-- **Autopilot `0 → APK`**: Otonom penuh — merancang UI, menyusun logika blok/Java, mengunduh *library* Maven, membangun APK, dan melakukan *self-healing* jika ada error kompilasi.
-- **Tutor**: Membimbing cara kerja blok dan arsitektur aplikasi langkah demi langkah.
+### 1. Five Agent Autonomy Modes
+- **Ask**: Read-only inspection and analysis of project architecture, views, events, and source code.
+- **Copilot**: Interactive design and coding assistant scoped to the currently opened screen or component.
+- **Agent**: Multi-turn execution across screens, components, custom views, and visual block logic.
+- **Autopilot (0 to APK)**: Fully autonomous execution from an initial prompt to a verified APK. Designs layouts, writes block and Java logic, resolves Maven dependencies, runs build pipelines, and self-heals compiler diagnostics.
+- **Tutor**: Guided walk-through explaining block structures, Android internals, and architecture best practices.
 
-### 2. 🌐 Multi-Provider LLM & Resilient Streaming Parser
-Mendukung berbagai penyedia model AI dengan manajemen *profile* dan penyimpanan API Key terenkripsi (**Android Keystore AES-GCM** via `SecretVault`):
-- **Google Gemini API** (`gemini-2.5-pro`, `gemini-2.5-flash`, dll.)
-- **OpenAI API** (`gpt-4.1`, `o3`, dll.)
-- **Anthropic Claude API** (`claude-sonnet-4`, dll.)
+### 2. Multi-Provider LLM Integration and Resilient Streaming
+Supports major AI providers with profile management and encrypted credential storage backed by Android Keystore AES-GCM (`SecretVault`):
+- **Google Gemini API** (`gemini-2.5-pro`, `gemini-2.5-flash`, etc.)
+- **OpenAI API** (`gpt-4.1`, `o3`, etc.)
+- **Anthropic Claude API** (`claude-sonnet-4`, etc.)
 - **OpenRouter API**
-- **Custom OpenAI-Compatible Gateway** (Ollama, Groq, DeepSeek, GLM, vLLM, LM Studio, dll.) — dilengkapi parser JSON *lenient* multi-objek (`{...}{...}`), penggabungan *chunk* SSE (`data: {...}`), dan *fallback* otomatis untuk *inline tool-calling* (`<tool_call>`).
+- **Custom OpenAI-Compatible Endpoints** (Ollama, Groq, DeepSeek, GLM, vLLM, LM Studio) featuring resilient multi-object JSON stream parsing (`{...}{...}`), SSE chunk aggregation, and automatic fallback for inline tool invocations (`<tool_call>`).
 
-### 3. 🐧 Terminal Linux & Debian PRoot Bawaan (*Zero-Setup*)
-- **Bundel Alpine Linux + PRoot Bawaan**: Langsung aktif di dalam APK tanpa perlu mengunduh apapun saat pertama kali dijalankan.
-- **Auto-Bootstrap Debian (`bookworm`)**: Ketika agen membutuhkan ekosistem penuh (`apt-get`, `python3`, `nodejs`, `git`, `curl`, `jq`), agen dapat mengunduh dan mengekstrak *rootfs* Debian secara otomatis di latar belakang.
-- **Direct Mount Proyek**: Direktori proyek aktif otomatis di-*mount* ke `/workspace` (kode sumber `.sketchware/mysc/list/<sc_id>`) dan `/project_data` (data metadata `.sketchware/data/<sc_id>`).
+### 3. Embedded Linux Terminal and Debian PRoot
+- **Prebundled Alpine Linux and PRoot**: Operational upon installation without additional runtime downloads.
+- **Debian (bookworm) Auto-Bootstrap**: Automates background download and rootfs extraction when comprehensive package management (`apt-get`, `python3`, `nodejs`, `git`, `curl`, `jq`) is required.
+- **Automated Workspace Mounting**: Mounts the active project's source tree to `/workspace` (`.sketchware/mysc/list/<sc_id>`) and project metadata to `/project_data` (`.sketchware/data/<sc_id>`).
 
-### 4. 🛠️ 20+ Built-in Agent Tools
-| Kategori | Nama Tool | Fungsi Utama |
+### 4. Over 20 Built-in Agent Tools
+
+| Category | Tool Name | Description |
 | :--- | :--- | :--- |
-| **Inspeksi Proyek** | `get_project_overview`, `list_project_files`, `read_project_file`, `search_project_code` | Membaca ringkasan proyek, daftar file, isi file, dan pencarian *regex* lintas layar, *event*, logika blok, XML, & Java. |
-| **Desain UI & Layar** | `create_screen`, `write_layout_views`, `write_layout_xml` | Membuat *Activity* + *Layout* baru, menyusun pohon *View* Sketchware, atau menulis XML langsung. |
-| **Logika, Event & Blok** | `search_block_catalog`, `write_event_logic`, `add_project_component`, `add_project_variable`, `add_custom_block` | Mencari katalog 250+ *opCode* blok Sketchware, menyusun logika event (`SketchIrCompiler`), menambah *Component*, variabel, & *MoreBlock*. |
-| **Kode Java & Manifest** | `write_custom_java`, `patch_activity_java`, `manage_permissions`, `configure_project_metadata` | Menulis kelas Java kustom, memodifikasi kode Activity, mengatur *permission* AndroidManifest, mengonfigurasi `package_name` / `minSdk` / `targetSdk` / palet warna, atau menghapus layar/event. |
-| **Library & Resource** | `manage_local_libraries`, `manage_project_resources` | Mengaktifkan *local library*, mengunduh artefak Maven/AAR/JAR beserta dependensi transitif + kompilasi `classes.jar` → `classes.dex` via R8/D8, membuat Vector Drawable XML, serta mengimpor gambar/font/sound/asset. |
-| **Keamanan & Build** | `manage_checkpoints`, `build_and_verify_project`, `capture_runtime_logs` | Membuat & memulihkan *snapshot checkpoint* sebelum perubahan besar, menjalankan kompilasi penuh (`aapt2` → `ecj/kotlinc` → `d8` → `apkbuilder`), dan menangkap `logcat` runtime. |
-| **Sistem & Web** | `run_terminal_command`, `web_search`, `web_fetch` | Menjalankan perintah shell di Android / Alpine / Debian, mencari referensi di web, dan mengambil dokumentasi/API eksternal. |
-| **DeerFlow 2.0 Sub-Agent & Artifacts** | `delegate_subagent`, `manage_artifacts` | Mendelegasikan tugas investigasi/audit ke *Sub-Agent* terisolasi (`researcher`, `ui_architect`, `block_auditor`, `compile_debugger`) dan mengelola *deliverable* di panel **📦 Artifacts**. |
+| **Project Inspection** | `get_project_overview`, `list_project_files`, `read_project_file`, `search_project_code` | Inspect project summary, file listings, source code, and regex search across layouts, events, blocks, XML, and Java. |
+| **UI and Screens** | `create_screen`, `write_layout_views`, `write_layout_xml` | Create Activities and CustomViews, generate visual View hierarchies, and write standard Android XML layouts. |
+| **Logic, Events, and Blocks** | `search_block_catalog`, `write_event_logic`, `add_project_component`, `add_project_variable`, `add_custom_block` | Search 250+ Sketchware opCodes, compile event logic via `SketchIrCompiler`, and manage Components, variables, and MoreBlocks. |
+| **Java Code and Manifest** | `write_custom_java`, `patch_activity_java`, `manage_permissions`, `configure_project_metadata` | Manage custom Java/Kotlin classes, patch Activity lifecycles, configure AndroidManifest permissions, and tune SDK targets. |
+| **Libraries and Resources** | `manage_local_libraries`, `manage_project_resources` | Enable local libraries, resolve Maven/AAR/JAR artifacts with transitive D8 compilation, and manage Drawables, fonts, and assets. |
+| **Diagnostics and Build** | `manage_checkpoints`, `build_and_verify_project`, `capture_runtime_logs` | Create pre-mutation checkpoints, execute headless build pipelines (`aapt2` -> `ecj/kotlinc` -> `d8` -> `apkbuilder`), and read runtime logcat. |
+| **System and Web** | `run_terminal_command`, `web_search`, `web_fetch` | Execute shell commands in Android/Alpine/Debian environments, search technical documentation, and fetch web resources. |
+| **Sub-Agents and Artifacts** | `delegate_subagent`, `manage_artifacts` | Delegate domain-specific tasks to isolated worker agents (`researcher`, `ui_architect`, `block_auditor`, `compile_debugger`) and maintain structured deliverables. |
 
-### 5. 🔌 Ekosistem MCP Server, MCP Client, Skills & Plugins
-- **Internal MCP Server (`127.0.0.1:8765`)**: Mengekspos seluruh tool Sketchware melalui protokol JSON-RPC 2.0 (`initialize`, `tools/list`, `tools/call`) sehingga agen eksternal via ADB atau terminal lokal dapat mengontrol proyek secara *real-time*.
-- **External MCP Client Hub**: Menghubungkan AI Agent ke server MCP eksternal berbasis HTTP/JSON-RPC.
-- **Skills (`SKILL.md`) & Dynamic Plugins**: Mendukung pemasangan instruksi keahlian khusus dan *custom tool* berbasis HTTP webhook atau *shell template*.
+### 5. Extensible MCP Server, MCP Client, Skills, and Plugins
+- **Built-in MCP Server (`127.0.0.1:8765`)**: Exposes project inspection and manipulation tools via standard JSON-RPC 2.0 (`initialize`, `tools/list`, `tools/call`) over ADB port forwarding or Wi-Fi LAN.
+- **External MCP Client Hub**: Connects the internal agent to external HTTP/JSON-RPC MCP servers.
+- **Skills (`SKILL.md`) and Plugins**: Extensible modular instruction definitions and external tool extensions.
 
-### 6. 🌍 Dukungan Multi-Bahasa Global (17 Bahasa + Auto System Locale)
-Mendukung pengguna dari seluruh negara dengan pengaturan bahasa instan (tersedia melalui *Workspace Sidebar* maupun di dalam **Pengaturan AI Agent Studio**) yang mengubah bahasa antarmuka **dan** menginstruksikan AI Agent untuk selalu merespons dalam bahasa pilihan pengguna:
-- **🌐 Auto (System Default)** — Otomatis mengikuti bahasa bawaan perangkat Android atau bahasa pesan pengguna.
-- **🇺🇸 English** · **🇮🇩 Bahasa Indonesia** · **🇪🇸 Español** · **🇧🇷 Português** · **🇸🇦 العربية** · **🇮🇳 हिन्दी** · **🇷🇺 Русский** · **🇨🇳 中文 (简体)** · **🇯🇵 日本語** · **🇰🇷 한국어** · **🇫🇷 Français** · **🇩🇪 Deutsch** · **🇹🇷 Türkçe** · **🇻🇳 Tiếng Việt** · **🇹🇭 ไทย** · **🇲🇾 Bahasa Melayu**
+### 6. Internationalization Support (17 Languages + System Locale)
+Runtime language switching via the Workspace Sidebar and AI Settings dialog. Configures both the user interface and system prompts:
+- **Auto (System Default)** — Matches the host device language or incoming prompt language.
+- Supported translations: English, Indonesian, Spanish, Portuguese, Arabic, Hindi, Russian, Simplified Chinese, Japanese, Korean, French, German, Turkish, Vietnamese, Thai, and Malay.
+
+### 7. Modern Workspace Interface and Context Integration
+- **Workspace Navigation Sidebar**: Collapsible navigation drawer covering New Chat, History, Artifacts, Agent Modes, Skills, Plugins, MCP Connectors, Terminal Sessions, and Checkpoints.
+- **Centered Input and Quick Actions**: Interactive prompt interface with dedicated shortcut chips for Build, Repair, Design, Learn, and Create actions.
+- **Structured Artifacts and To-Dos**: Stacked task-tracking cards and an artifact drawer with real-time counters for generated APKs, layouts, Java files, and specification docs.
+- **Unified "Add Context" Menu**: Bottom-left context launcher combining File Selection, Directory Attachment, APK Inspection (manifest, DEX, resources, native libraries), Image Import (with one-click import into `@drawable`), Quick Slash Commands (`/`), and Mode Selectors.
 
 ---
 
-## 🏗️ Arsitektur Kode Sumber
+## Repository Architecture
 
 ```text
 app/src/main/
-├── cpp/                                # Native PTY bridge (libsketch_pty.so) untuk sesi terminal interaktif
-├── assets/linux/                       # Bundel proot (aarch64/armv7/x86_64) & rootfs Alpine Linux bawaan
+├── cpp/                                # Native PTY bridge (libsketch_pty.so) for interactive terminal sessions
+├── assets/linux/                       # Embedded proot binaries (aarch64/armv7/x86_64) and Alpine rootfs
 └── java/
-    ├── a/a/a/                          # Compiler inti Sketchware Pro (ProjectBuilder, Jx, Lx, Ox, Ix, yq)
-    ├── com/besome/sketch/              # Activity utama Sketchware (DesignActivity, LogicEditorActivity, dll.)
-    ├── mod/                            # Modifikasi komunitas Sketchware Pro (Local Library, Code Editor, dll.)
-    └── pro/sketchware/ai/              # Modul AI Agent Studio
+    ├── a/a/a/                          # Core Sketchware Pro compiler pipeline (ProjectBuilder, Jx, Lx, Ox, Ix, yq)
+    ├── com/besome/sketch/              # Core Activities (DesignActivity, LogicEditorActivity, etc.)
+    ├── mod/                            # Community additions (Local Libraries, Code Editor, etc.)
+    └── pro/sketchware/ai/              # AI Agent Studio Subsystem
         ├── agent/                      # AgentOrchestrator, AgentMemoryStore, AgentForegroundService
-        ├── config/                     # AiConfigManager (Multi-provider & profil model)
+        ├── config/                     # AiConfigManager (Multi-provider settings and model configurations)
         ├── extensions/                 # McpClientHub, SkillManager, PluginManager
-        ├── ir/                         # BlockCatalog & SketchIrCompiler (JSON IR -> Sketchware BlockBean)
-        ├── mcp/                        # SketchwareMcpServer (JSON-RPC 2.0 Server di port 8765)
-        ├── observe/                    # HeadlessProjectBuilder & RuntimeLogHarness
-        ├── project/                    # ProjectGateway (akses langsung ke struktur data proyek Sketchware)
-        ├── provider/                   # LlmProvider (Gemini, OpenAI, Claude, OpenRouter, Custom Resilient Parser)
-        ├── security/                   # SecretVault (Enkripsi API Key berbasis Android Keystore AES-GCM)
+        ├── ir/                         # BlockCatalog and SketchIrCompiler (IR to Sketchware BlockBeans)
+        ├── mcp/                        # SketchwareMcpServer (JSON-RPC 2.0 server on port 8765)
+        ├── observe/                    # HeadlessProjectBuilder and RuntimeLogHarness
+        ├── project/                    # ProjectGateway (direct access to Sketchware data store)
+        ├── provider/                   # LlmProvider (Gemini, OpenAI, Claude, OpenRouter, Custom Endpoints)
+        ├── security/                   # SecretVault (Android Keystore AES-GCM credential encryption)
         ├── shell/                      # LinuxSubsystem, ShellRunner, TerminalSession, LinuxDownloader
-        ├── tools/                      # SketchwareToolRegistry & WebTools
-        └── ui/                         # Jetpack Compose UI (AiAgentStudioSheet, AgentChatScreen, TerminalScreen, dll.)
+        ├── tools/                      # SketchwareToolRegistry and WebTools
+        └── ui/                         # Jetpack Compose UI (AiAgentStudioSheet, AgentChatScreen, TerminalScreen)
 ```
 
 ---
 
-## ⚙️ Cara Compile Sendiri (Local & GitHub Actions)
+## Building from Source
 
-### A. Otomatis via GitHub Actions (Tanpa Install Android Studio)
-1. **Fork** repositori ini ke akun GitHub Anda.
-2. Buka tab **Actions** pada repositori hasil fork Anda, lalu pilih workflow **Build Sketchware Pro AI Agent APK**.
-3. Klik **Run workflow** (atau lakukan *push* ke branch `main`).
-4. Setelah selesai, unduh file **`Sketchware_Pro_AI_Agent.apk`** langsung dari halaman **Releases** atau dari bagian **Artifacts** pada workflow run tersebut.
+### Option A: GitHub Actions (Automated Cloud Build)
+1. Fork this repository to your GitHub account.
+2. In your fork, navigate to the **Actions** tab and select the **Build Sketchware Pro AI Agent APK** workflow.
+3. Click **Run workflow** (or push a commit to `main`).
+4. Once completed, download `Sketchware_Pro_AI_Agent.apk` from the **Releases** tab or from the workflow run artifacts.
 
-### B. Build secara Lokal via Gradle
-Pastikan Anda memiliki **JDK 21** dan **Android SDK (API 35 + NDK)**:
+### Option B: Local Gradle Build
+Prerequisites: **JDK 21** and **Android SDK (API 35 with NDK)**.
+
 ```bash
 git clone https://github.com/GeekJaack/Sketchware-Pro.git
 cd Sketchware-Pro
 
-# Jalankan Unit Tests & Build Debug APK
+# Run unit tests and assemble debug APK
 ./gradlew :app:testDebugUnitTest :app:assembleDebug
 ```
-File APK hasil build akan tersedia di:
+
+The output package will be generated at:
 `app/build/outputs/apk/debug/app-debug.apk`
 
 ---
 
-## 🤝 Kontribusi & Lisensi Komunitas
+## Contributing and Community
 
-Kontribusi sangat terbuka! Silakan buat *Issue* atau *Pull Request* untuk menambahkan fitur baru, memperbaiki bug, atau memperkaya katalog *Skill* dan *Plugin* AI Agent Studio.
+Contributions are welcome. Submit an Issue or Pull Request to propose features, report defects, or contribute to the Skill and Plugin catalogs.
