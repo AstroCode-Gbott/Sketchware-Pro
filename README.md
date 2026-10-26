@@ -1,83 +1,137 @@
 <p align="center">
-  <img src="assets/Sketchware-Pro.png" style="width: 30%;" />
+  <img src="assets/Sketchware-Pro.png" style="width: 24%;" alt="Sketchware Pro AI Agent Studio Logo" />
 </p>
 
-# Sketchware Pro
-[![GitHub contributors](https://img.shields.io/github/contributors/Sketchware-Pro/Sketchware-Pro)](https://github.com/Sketchware-Pro/Sketchware-Pro/graphs/contributors)
-[![GitHub last commit](https://img.shields.io/github/last-commit/Sketchware-Pro/Sketchware-Pro)](https://github.com/Sketchware-Pro/Sketchware-Pro/commits/)
-[![Discord server stats](https://img.shields.io/discord/790686719753846785)](http://discord.gg/kq39yhT4rX)
-[![Total downloads](https://img.shields.io/github/downloads/Sketchware-Pro/Sketchware-Pro/total)](https://github.com/Sketchware-Pro/Sketchware-Pro/releases)
-[![Repository Size](https://img.shields.io/github/repo-size/Sketchware-Pro/Sketchware-Pro)](https://github.com/Sketchware-Pro/Sketchware-Pro)
+<h1 align="center">Sketchware Pro — AI Agent Studio Edition</h1>
 
-Welcome to Sketchware Pro! Here you'll find the source code of many classes in Sketchware Pro and, most importantly, the place to contribute to Sketchware Pro.
+<p align="center">
+  <b>Open-Source Autonomous Android App Development IDE with Embedded AI Agent Harness, Linux/Debian Terminal, MCP Server & Client, and Self-Healing Compiler</b>
+</p>
 
-## Building the App
-To build the app, you must use Gradle. It's highly recommended to use Android Studio for the best experience.
+<p align="center">
+  <a href="https://github.com/nikmatnyata03-beep/Sketchware-Pro/actions/workflows/android.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/nikmatnyata03-beep/Sketchware-Pro/android.yml?branch=main&label=Auto%20Compile%20APK&logo=githubactions" alt="Auto Compile APK Status" />
+  </a>
+  <a href="https://github.com/nikmatnyata03-beep/Sketchware-Pro/releases/latest">
+    <img src="https://img.shields.io/github/v/release/nikmatnyata03-beep/Sketchware-Pro?label=Latest%20APK&logo=android&color=2ea44f" alt="Latest Release" />
+  </a>
+  <a href="https://github.com/nikmatnyata03-beep/Sketchware-Pro/releases">
+    <img src="https://img.shields.io/github/downloads/nikmatnyata03-beep/Sketchware-Pro/total?label=APK%20Downloads&logo=github" alt="Total Downloads" />
+  </a>
+  <a href="https://github.com/nikmatnyata03-beep/Sketchware-Pro/commits/main">
+    <img src="https://img.shields.io/github/last-commit/nikmatnyata03-beep/Sketchware-Pro?logo=git" alt="Last Commit" />
+  </a>
+</p>
 
-### Source Code Map
+---
 
-| Class           | Role                                        |
-| --------------- | ------------------------------------------- |
-| `a.a.a.ProjectBuilder`      | Helper for compiling an entire project       |
-| `a.a.a.Ix`      | Responsible for generating AndroidManifest.xml |
-| `a.a.a.Jx`      | Generates source code of activities          |
-| `a.a.a.Lx`      | Generates source code of components, such as listeners, etc. |
-| `a.a.a.Ox`      | Responsible for generating XML files of layouts |
-| `a.a.a.qq`      | Registry of built-in libraries' dependencies |
-| `a.a.a.tq`      | Responsible for the compiling dialog's quizzes |
-| `a.a.a.yq`      | Organizes Sketchware projects' file paths    |
+## 📥 Download APK (Siap Pakai)
 
-> [!TIP]
-> You can also check the `mod` package, which contains the majority of contributors' changes.
+File APK dikompilasi secara otomatis oleh **GitHub Actions** setiap kali ada pembaruan kode dan dipublikasikan langsung ke **GitHub Releases**:
 
-## Contributing
+<p align="center">
+  <a href="https://github.com/nikmatnyata03-beep/Sketchware-Pro/releases/download/v7.0.0-ai-agent/Sketchware_Pro_AI_Agent.apk">
+    <img src="https://img.shields.io/badge/⬇️_Download_APK_Terbaru-Sketchware__Pro__AI__Agent.apk-2ea44f?style=for-the-badge&logo=android&logoColor=white" alt="Download Sketchware_Pro_AI_Agent.apk" />
+  </a>
+</p>
 
-If you'd like to contribute to Sketchware Pro, follow these steps:
+- **Direct Download (Latest Release):** [`Sketchware_Pro_AI_Agent.apk`](https://github.com/nikmatnyata03-beep/Sketchware-Pro/releases/download/v7.0.0-ai-agent/Sketchware_Pro_AI_Agent.apk)
+- **Halaman Semua Rilis:** [GitHub Releases](https://github.com/nikmatnyata03-beep/Sketchware-Pro/releases)
+- **Build Artifacts (CI/CD):** [GitHub Actions Runs](https://github.com/nikmatnyata03-beep/Sketchware-Pro/actions/workflows/android.yml)
 
-1. Fork this repository.
-2. Make changes in your forked repository.
-3. Test out those changes.
-4. Create a pull request in this repository.
-5. Your pull request will be reviewed by the repository members and merged if accepted.
+---
 
-We welcome contributions of any size, whether they are major features or bug fixes, but please note that all contributions will be thoroughly reviewed.
+## ✨ Fitur Utama AI Agent Studio
 
-### Commit Message
+Edisi ini mengintegrasikan **AI Agent Studio** setara *Claude Code / Antigravity / OpenCode* langsung ke dalam IDE **Sketchware Pro** di perangkat Android Anda:
 
-When you make changes to one or more files, you need to commit those changes with a commit message. Here are some guidelines:
+### 1. 🤖 5 Mode Otonomi Agen
+- **Ask**: Tanya jawab & inspeksi kode/arsitektur proyek (*Read-only*).
+- **Copilot**: Bantu mengedit tampilan (*View*) dan *Event* pada layar yang sedang dibuka.
+- **Agent**: Eksekusi *multi-step* lintas layar, komponen, *Custom View*, dan logika blok.
+- **Autopilot `0 → APK`**: Otonom penuh — merancang UI, menyusun logika blok/Java, mengunduh *library* Maven, membangun APK, dan melakukan *self-healing* jika ada error kompilasi.
+- **Tutor**: Membimbing cara kerja blok dan arsitektur aplikasi langkah demi langkah.
 
-- Keep the commit message short and detailed.
-- Use one of these commit types as a prefix:
-  - `feat:` for a feature, possibly improving something already existing.
-  - `fix:` for a fix, such as a bug fix.
-  - `style:` for features and updates related to styling.
-  - `refactor:` for refactoring a specific section of the codebase.
-  - `test:` for everything related to testing.
-  - `docs:` for everything related to documentation.
-  - `chore:` for code maintenance (you can also use emojis to represent commit types).
+### 2. 🌐 Multi-Provider LLM & Resilient Streaming Parser
+Mendukung berbagai penyedia model AI dengan manajemen *profile* dan penyimpanan API Key terenkripsi (**Android Keystore AES-GCM** via `SecretVault`):
+- **Google Gemini API** (`gemini-2.5-pro`, `gemini-2.5-flash`, dll.)
+- **OpenAI API** (`gpt-4.1`, `o3`, dll.)
+- **Anthropic Claude API** (`claude-sonnet-4`, dll.)
+- **OpenRouter API**
+- **Custom OpenAI-Compatible Gateway** (Ollama, Groq, DeepSeek, GLM, vLLM, LM Studio, dll.) — dilengkapi parser JSON *lenient* multi-objek (`{...}{...}`), penggabungan *chunk* SSE (`data: {...}`), dan *fallback* otomatis untuk *inline tool-calling* (`<tool_call>`).
 
-Examples:
-- `feat: Speed up compiling with new technique`
-- `fix: Fix crash during launch on certain phones`
-- `refactor: Reformat code in File.java`
+### 3. 🐧 Terminal Linux & Debian PRoot Bawaan (*Zero-Setup*)
+- **Bundel Alpine Linux + PRoot Bawaan**: Langsung aktif di dalam APK tanpa perlu mengunduh apapun saat pertama kali dijalankan.
+- **Auto-Bootstrap Debian (`bookworm`)**: Ketika agen membutuhkan ekosistem penuh (`apt-get`, `python3`, `nodejs`, `git`, `curl`, `jq`), agen dapat mengunduh dan mengekstrak *rootfs* Debian secara otomatis di latar belakang.
+- **Direct Mount Proyek**: Direktori proyek aktif otomatis di-*mount* ke `/workspace` (kode sumber `.sketchware/mysc/list/<sc_id>`) dan `/project_data` (data metadata `.sketchware/data/<sc_id>`).
 
-> [!IMPORTANT]
-> If you want to add new features that don't require editing other packages other than `pro.sketchware`, make your changes in `pro.sketchware` package, and respect the directories and files structure and names. Also, even though the project compiles just fine with Kotlin classes that you might add, try to make your changes or additions in Java, not Kotlin unless it is more than necessary.
+### 4. 🛠️ 20+ Built-in Agent Tools
+| Kategori | Nama Tool | Fungsi Utama |
+| :--- | :--- | :--- |
+| **Inspeksi Proyek** | `get_project_overview`, `list_project_files`, `read_project_file`, `search_project_code` | Membaca ringkasan proyek, daftar file, isi file, dan pencarian *regex* lintas layar, *event*, logika blok, XML, & Java. |
+| **Desain UI & Layar** | `create_screen`, `write_layout_views`, `write_layout_xml` | Membuat *Activity* + *Layout* baru, menyusun pohon *View* Sketchware, atau menulis XML langsung. |
+| **Logika, Event & Blok** | `search_block_catalog`, `write_event_logic`, `add_project_component`, `add_project_variable`, `add_custom_block` | Mencari katalog 250+ *opCode* blok Sketchware, menyusun logika event (`SketchIrCompiler`), menambah *Component*, variabel, & *MoreBlock*. |
+| **Kode Java & Manifest** | `write_custom_java`, `patch_activity_java`, `manage_permissions`, `configure_project_metadata` | Menulis kelas Java kustom, memodifikasi kode Activity, mengatur *permission* AndroidManifest, mengonfigurasi `package_name` / `minSdk` / `targetSdk` / palet warna, atau menghapus layar/event. |
+| **Library & Resource** | `manage_local_libraries`, `manage_project_resources` | Mengaktifkan *local library*, mengunduh artefak Maven/AAR/JAR beserta dependensi transitif + kompilasi `classes.jar` → `classes.dex` via R8/D8, membuat Vector Drawable XML, serta mengimpor gambar/font/sound/asset. |
+| **Keamanan & Build** | `manage_checkpoints`, `build_and_verify_project`, `capture_runtime_logs` | Membuat & memulihkan *snapshot checkpoint* sebelum perubahan besar, menjalankan kompilasi penuh (`aapt2` → `ecj/kotlinc` → `d8` → `apkbuilder`), dan menangkap `logcat` runtime. |
+| **Sistem & Web** | `run_terminal_command`, `web_search`, `web_fetch` | Menjalankan perintah shell di Android / Alpine / Debian, mencari referensi di web, dan mengambil dokumentasi/API eksternal. |
 
-## Thanks for Contributing
+### 5. 🔌 Ekosistem MCP Server, MCP Client, Skills & Plugins
+- **Internal MCP Server (`127.0.0.1:8765`)**: Mengekspos seluruh tool Sketchware melalui protokol JSON-RPC 2.0 (`initialize`, `tools/list`, `tools/call`) sehingga agen eksternal via ADB atau terminal lokal dapat mengontrol proyek secara *real-time*.
+- **External MCP Client Hub**: Menghubungkan AI Agent ke server MCP eksternal berbasis HTTP/JSON-RPC.
+- **Skills (`SKILL.md`) & Dynamic Plugins**: Mendukung pemasangan instruksi keahlian khusus dan *custom tool* berbasis HTTP webhook atau *shell template*.
 
-Thank you for contributing to Sketchware Pro! Your contributions help keep Sketchware Pro alive. Each accepted contribution will be noted down in the "About Team" activity. We'll use your GitHub name and profile picture initially, but they can be changed, of course.
+---
 
-## Discord
+## 🏗️ Arsitektur Kode Sumber
 
-Want to chat with us, discuss changes, or just hang out? We have a Discord server just for that.
+```text
+app/src/main/
+├── cpp/                                # Native PTY bridge (libsketch_pty.so) untuk sesi terminal interaktif
+├── assets/linux/                       # Bundel proot (aarch64/armv7/x86_64) & rootfs Alpine Linux bawaan
+└── java/
+    ├── a/a/a/                          # Compiler inti Sketchware Pro (ProjectBuilder, Jx, Lx, Ox, Ix, yq)
+    ├── com/besome/sketch/              # Activity utama Sketchware (DesignActivity, LogicEditorActivity, dll.)
+    ├── mod/                            # Modifikasi komunitas Sketchware Pro (Local Library, Code Editor, dll.)
+    └── pro/sketchware/ai/              # Modul AI Agent Studio
+        ├── agent/                      # AgentOrchestrator, AgentMemoryStore, AgentForegroundService
+        ├── config/                     # AiConfigManager (Multi-provider & profil model)
+        ├── extensions/                 # McpClientHub, SkillManager, PluginManager
+        ├── ir/                         # BlockCatalog & SketchIrCompiler (JSON IR -> Sketchware BlockBean)
+        ├── mcp/                        # SketchwareMcpServer (JSON-RPC 2.0 Server di port 8765)
+        ├── observe/                    # HeadlessProjectBuilder & RuntimeLogHarness
+        ├── project/                    # ProjectGateway (akses langsung ke struktur data proyek Sketchware)
+        ├── provider/                   # LlmProvider (Gemini, OpenAI, Claude, OpenRouter, Custom Resilient Parser)
+        ├── security/                   # SecretVault (Enkripsi API Key berbasis Android Keystore AES-GCM)
+        ├── shell/                      # LinuxSubsystem, ShellRunner, TerminalSession, LinuxDownloader
+        ├── tools/                      # SketchwareToolRegistry & WebTools
+        └── ui/                         # Jetpack Compose UI (AiAgentStudioSheet, AgentChatScreen, TerminalScreen, dll.)
+```
 
-[![Join our Discord server!](https://invidget.switchblade.xyz/kq39yhT4rX)](http://discord.gg/kq39yhT4rX)
+---
 
-## Disclaimer
+## ⚙️ Cara Compile Sendiri (Local & GitHub Actions)
 
-This mod was not created for any harmful purposes, such as harming Sketchware; quite the opposite, actually. It was made to keep Sketchware alive by the community for the community. Please use it at your own discretion and consider becoming a Patreon backer to support the developers. Unfortunately, other ways to support them are not working anymore, so Patreon is the only available option currently. You can find their Patreon page [here](https://www.patreon.com/sketchware).
+### A. Otomatis via GitHub Actions (Tanpa Install Android Studio)
+1. **Fork** repositori ini ke akun GitHub Anda.
+2. Buka tab **Actions** pada repositori hasil fork Anda, lalu pilih workflow **Build Sketchware Pro AI Agent APK**.
+3. Klik **Run workflow** (atau lakukan *push* ke branch `main`).
+4. Setelah selesai, unduh file **`Sketchware_Pro_AI_Agent.apk`** langsung dari halaman **Releases** atau dari bagian **Artifacts** pada workflow run tersebut.
 
-We do NOT permit publishing Sketchware Pro as it is, or with modifications, on Play Store or on any other app store. Keep in mind that this project is still a mod. Unauthorized modding of apps is considered illegal and we discourage such behavior.
+### B. Build secara Lokal via Gradle
+Pastikan Anda memiliki **JDK 21** dan **Android SDK (API 35 + NDK)**:
+```bash
+git clone https://github.com/nikmatnyata03-beep/Sketchware-Pro.git
+cd Sketchware-Pro
 
-We love Sketchware very much and are grateful to Sketchware's developers for creating such an amazing app. However, we haven't received updates for a long time. That's why we decided to keep Sketchware alive by creating this mod, and it's completely free. We don't demand any money :)
+# Jalankan Unit Tests & Build Debug APK
+./gradlew :app:testDebugUnitTest :app:assembleDebug
+```
+File APK hasil build akan tersedia di:
+`app/build/outputs/apk/debug/app-debug.apk`
+
+---
+
+## 🤝 Kontribusi & Lisensi Komunitas
+
+Kontribusi sangat terbuka! Silakan buat *Issue* atau *Pull Request* untuk menambahkan fitur baru, memperbaiki bug, atau memperkaya katalog *Skill* dan *Plugin* AI Agent Studio.
