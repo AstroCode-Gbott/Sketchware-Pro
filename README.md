@@ -87,14 +87,6 @@ Mendukung pengguna dari seluruh negara dengan pengaturan bahasa instan (tersedia
 - **🌐 Auto (System Default)** — Otomatis mengikuti bahasa bawaan perangkat Android atau bahasa pesan pengguna.
 - **🇺🇸 English** · **🇮🇩 Bahasa Indonesia** · **🇪🇸 Español** · **🇧🇷 Português** · **🇸🇦 العربية** · **🇮🇳 हिन्दी** · **🇷🇺 Русский** · **🇨🇳 中文 (简体)** · **🇯🇵 日本語** · **🇰🇷 한국어** · **🇫🇷 Français** · **🇩🇪 Deutsch** · **🇹🇷 Türkçe** · **🇻🇳 Tiếng Việt** · **🇹🇭 ไทย** · **🇲🇾 Bahasa Melayu**
 
-### 7. 🦌 Desain UI/UX Workspace Gaya ByteDance DeerFlow 2.0 & Menu `+` ("Add Context")
-Antarmuka **AI Agent Studio** dirancang ulang mengikuti arsitektur *open-source* **[ByteDance DeerFlow 2.0](https://github.com/bytedance/deer-flow)**:
-- **Palet Warna Warm Cream & Charcoal (`DeerFlowTheme`)**: Mengadopsi token warna *shadcn/oklch* DeerFlow 2.0 dengan aksen emas khusus untuk mode **Autopilot · Ultra**.
-- **Collapsible Workspace Sidebar**: Panel navigasi samping untuk berpindah cepat antara **New chat**, **Chats**, **📦 Artifacts**, **Agent modes** (`Read-only`, `Flash`, `Pro`, `Ultra`, `Guide`), **Skills**, **Plugins**, **MCP connectors**, **Terminal**, **Checkpoints**, serta daftar **Recent prompts** untuk melompat langsung ke riwayat instruksi di dalam percakapan.
-- **Welcome Screen Interaktif (`AuroraText` + Centered Input Box)**: Sapaan animasi gradien *Aurora* (`👋 Halo, mari membangun!` / `🚀 Mode Ultra siap!`), kotak input mengambang di tengah layar saat percakapan baru dimulai, serta deretan chip aksi cepat (**Bangun**, **Perbaiki**, **Desain**, **Pelajari**, dan menu **Buat ▾**: *Layar baru, Logika blok, Library Maven, Skill baru*).
-- **Panel 📦 Artifacts & To-dos Terintegrasi**: Kartu **To-dos** yang bertumpuk rapi di atas kotak input untuk memantau progres rencana kerja agen, serta tombol **📦 Artifacts** dengan *badge* penghitung *real-time* di bilah atas untuk melihat, menyalin, atau melampirkan file hasil kerja agen (APK hasil kompilasi, Layout XML, kode Java, & dokumen spesifikasi).
-- **Tombol `+` ("Add Context") di Kiri Bawah**: Menyatukan **Tambahkan File**, **Tambahkan Folder**, **Tambahkan File APK** (lengkap dengan inspeksi otomatis `AndroidManifest.xml`, `classes.dex`, layout, drawable, & native libs `.so`), **Tambahkan Gambar** (dengan impor sekali klik ke `@drawable`), **Prompt Cepat (`/`)**, dan **Mode Agent**.
-
 ---
 
 ## 🏗️ Arsitektur Kode Sumber
