@@ -70,4 +70,15 @@ class LlmProviderResilienceTest {
         assertEquals("java", call.arguments.get("category").asString)
         assertEquals("MainActivity.java", call.arguments.get("name").asString)
     }
+
+    @Test
+    fun `all 17 AgentLanguage entries provide complete UI strings and systemPromptDirective`() {
+        for (lang in pro.sketchware.ai.config.AgentLanguage.entries) {
+            val ui = pro.sketchware.ai.config.AiStrings.forLanguage(lang)
+            assertTrue(ui.emptyTitle.isNotBlank())
+            assertTrue(ui.composerHint.isNotBlank())
+            assertTrue(ui.settingsDialogTitle.isNotBlank())
+            assertTrue(lang.systemPromptDirective().contains("LANGUAGE RULE"))
+        }
+    }
 }

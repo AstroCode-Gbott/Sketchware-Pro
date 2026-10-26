@@ -60,10 +60,43 @@ object AiSettingsDialog {
 
         val providerTypes = AiProviderType.entries
         var selectedProvider = config.providerType
+        var ui = pro.sketchware.ai.config.AiStrings.current(context)
+
+        // 0. Language Selection (Global / Multi-Country Support)
+        val langLabel = TextView(context).apply {
+            text = ui.settingsLanguageLabel
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(cOnSurface)
+            setPadding(0, 0, 0, dp4)
+        }
+        root.addView(langLabel)
+
+        val btnSelectLanguage = MaterialButton(
+            context,
+            null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle
+        ).apply {
+            val activeLang = config.agentLanguage
+            text = if (activeLang == pro.sketchware.ai.config.AgentLanguage.AUTO) {
+                "${activeLang.displayLabel} → ${activeLang.resolved().displayLabel}"
+            } else {
+                activeLang.displayLabel
+            }
+            textSize = 12f
+            minHeight = SketchwareUtil.dpToPx(40f)
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+        }
+        root.addView(
+            btnSelectLanguage,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp10
+            }
+        )
 
         // 1. Provider Selection
         val providerLabel = TextView(context).apply {
-            text = "1. Pilih AI Provider (BYOK)"
+            text = ui.settingsProviderLabel
             textSize = 13f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(cOnSurface)
@@ -596,11 +629,34 @@ object AiSettingsDialog {
         populateProviderFields(selectedProvider)
         renderSavedProfiles()
 
+        fun refreshLanguageLabels() {
+            ui = pro.sketchware.ai.config.AiStrings.current(context)
+            val activeLang = config.agentLanguage
+            btnSelectLanguage.text = if (activeLang == pro.sketchware.ai.config.AgentLanguage.AUTO) {
+                "${activeLang.displayLabel} → ${activeLang.resolved().displayLabel}"
+            } else {
+                activeLang.displayLabel
+            }
+            langLabel.text = ui.settingsLanguageLabel
+            providerLabel.text = ui.settingsProviderLabel
+            btnSaveKeyModel.text = ui.settingsSaveKeyBtn
+            btnDeleteKey.text = ui.settingsDeleteKeyBtn
+            tvSavedTitle.text = ui.settingsSavedProfilesTitle
+        }
+        refreshLanguageLabels()
+
+        btnSelectLanguage.setOnClickListener {
+            pro.sketchware.ai.config.AiStrings.showLanguagePickerDialog(context) {
+                refreshLanguageLabels()
+                onSaved?.invoke()
+            }
+        }
+
         MaterialAlertDialogBuilder(context)
-            .setTitle("Pengaturan AI Agent Studio")
+            .setTitle(ui.settingsDialogTitle)
             .setIcon(R.drawable.ic_mtrl_settings)
             .setView(scroll)
-            .setPositiveButton("Simpan & Tutup") { d, _ ->
+            .setPositiveButton(ui.saveAndCloseText) { d, _ ->
                 val keyText = etApiKey.text?.toString()?.trim().orEmpty()
                 val modelText = etModel.text?.toString()?.trim().orEmpty().ifEmpty { selectedProvider.defaultModel }
                 val urlText = etBaseUrl.text?.toString()?.trim().orEmpty().ifEmpty { selectedProvider.defaultBaseUrl }
@@ -618,11 +674,11 @@ object AiSettingsDialog {
                 config.mcpServerEnabled = cbMcpEnabled.isChecked
                 config.mcpServerPort = etMcpPort.text?.toString()?.toIntOrNull() ?: 8765
                 pro.sketchware.ai.mcp.SketchwareMcpServer.ensureStarted(context)
-                SketchwareUtil.toast("Konfigurasi AI Agent & MCP Server disimpan!")
+                SketchwareUtil.toast("✓ ${ui.settingsDialogTitle}")
                 onSaved?.invoke()
                 d.dismiss()
             }
-            .setNegativeButton("Tutup", null)
+            .setNegativeButton(ui.closeText, null)
             .show()
     }
 }

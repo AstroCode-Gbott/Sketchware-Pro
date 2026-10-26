@@ -81,6 +81,11 @@ Mendukung berbagai penyedia model AI dengan manajemen *profile* dan penyimpanan 
 - **External MCP Client Hub**: Menghubungkan AI Agent ke server MCP eksternal berbasis HTTP/JSON-RPC.
 - **Skills (`SKILL.md`) & Dynamic Plugins**: Mendukung pemasangan instruksi keahlian khusus dan *custom tool* berbasis HTTP webhook atau *shell template*.
 
+### 6. 🌍 Dukungan Multi-Bahasa Global (17 Bahasa + Auto System Locale)
+Mendukung pengguna dari seluruh negara dengan pengaturan bahasa instan (tersedia melalui tombol pill **🌐 Language** di bilah bawah chat maupun di dalam **Pengaturan AI Agent Studio**) yang mengubah bahasa antarmuka **dan** menginstruksikan AI Agent untuk selalu merespons dalam bahasa pilihan pengguna:
+- **🌐 Auto (System Default)** — Otomatis mengikuti bahasa bawaan perangkat Android atau bahasa pesan pengguna.
+- **🇺🇸 English** · **🇮🇩 Bahasa Indonesia** · **🇪🇸 Español** · **🇧🇷 Português** · **🇸🇦 العربية** · **🇮🇳 हिन्दी** · **🇷🇺 Русский** · **🇨🇳 中文 (简体)** · **🇯🇵 日本語** · **🇰🇷 한국어** · **🇫🇷 Français** · **🇩🇪 Deutsch** · **🇹🇷 Türkçe** · **🇻🇳 Tiếng Việt** · **🇹🇭 ไทย** · **🇲🇾 Bahasa Melayu**
+
 ---
 
 ## 🏗️ Arsitektur Kode Sumber

@@ -88,6 +88,73 @@ enum class AgentAutonomyMode(
     }
 }
 
+enum class AgentLanguage(
+    val code: String,
+    val displayLabel: String,
+    val shortBadge: String,
+    val llmLanguageName: String
+) {
+    AUTO("auto", "🌐 Auto (System Default)", "🌐 Auto", "the user's device/message language"),
+    ID("id", "🇮🇩 Bahasa Indonesia", "🇮🇩 ID", "Indonesian (Bahasa Indonesia)"),
+    EN("en", "🇺🇸 English", "🇺🇸 EN", "English"),
+    ES("es", "🇪🇸 Español", "🇪🇸 ES", "Spanish (Español)"),
+    PT("pt", "🇧🇷 Português", "🇧🇷 PT", "Portuguese (Português)"),
+    AR("ar", "🇸🇦 العربية", "🇸🇦 AR", "Arabic (العربية)"),
+    HI("hi", "🇮🇳 हिन्दी", "🇮🇳 HI", "Hindi (हिन्दी)"),
+    RU("ru", "🇷🇺 Русский", "🇷🇺 RU", "Russian (Русский)"),
+    ZH("zh", "🇨🇳 中文 (简体)", "🇨🇳 ZH", "Simplified Chinese (简体中文)"),
+    JA("ja", "🇯🇵 日本語", "🇯🇵 JA", "Japanese (日本語)"),
+    KO("ko", "🇰🇷 한국어", "🇰🇷 KO", "Korean (한국어)"),
+    FR("fr", "🇫🇷 Français", "🇫🇷 FR", "French (Français)"),
+    DE("de", "🇩🇪 Deutsch", "🇩🇪 DE", "German (Deutsch)"),
+    TR("tr", "🇹🇷 Türkçe", "🇹🇷 TR", "Turkish (Türkçe)"),
+    VI("vi", "🇻🇳 Tiếng Việt", "🇻🇳 VI", "Vietnamese (Tiếng Việt)"),
+    TH("th", "🇹🇭 ไทย", "🇹🇭 TH", "Thai (ภาษาไทย)"),
+    MS("ms", "🇲🇾 Bahasa Melayu", "🇲🇾 MS", "Malay (Bahasa Melayu)");
+
+    fun resolved(): AgentLanguage {
+        if (this != AUTO) return this
+        val sys = java.util.Locale.getDefault().language.lowercase(java.util.Locale.ROOT)
+        return when (sys) {
+            "in", "id" -> ID
+            "es" -> ES
+            "pt" -> PT
+            "ar" -> AR
+            "hi" -> HI
+            "ru" -> RU
+            "zh" -> ZH
+            "ja" -> JA
+            "ko" -> KO
+            "fr" -> FR
+            "de" -> DE
+            "tr" -> TR
+            "vi" -> VI
+            "th" -> TH
+            "ms" -> MS
+            else -> EN
+        }
+    }
+
+    fun systemPromptDirective(): String {
+        val eff = resolved()
+        return if (this == AUTO) {
+            "IMPORTANT LANGUAGE RULE: Respond in the same language the user writes in (or in ${eff.llmLanguageName} by default). Keep all explanations clear, natural, and well-structured."
+        } else {
+            "IMPORTANT LANGUAGE RULE: The user has explicitly selected **${eff.llmLanguageName}** (${eff.displayLabel}) as their preferred language. You MUST write all assistant responses, task plans, and explanations in **${eff.llmLanguageName}**."
+        }
+    }
+
+    companion object {
+        @JvmStatic
+        fun fromCode(code: String?): AgentLanguage {
+            if (code.isNullOrBlank()) return AUTO
+            return entries.firstOrNull {
+                it.code.equals(code, ignoreCase = true) || it.name.equals(code, ignoreCase = true)
+            } ?: AUTO
+        }
+    }
+}
+
 data class SavedAiProfile(
     val id: String,
     val label: String,
@@ -284,6 +351,10 @@ class AiConfigManager(context: Context) {
         prefs.edit().putString(KEY_SAVED_PROFILES, SecretVault.encrypt(arr.toString())).apply()
     }
 
+    var agentLanguage: AgentLanguage
+        get() = AgentLanguage.fromCode(prefs.getString(KEY_AGENT_LANGUAGE, AgentLanguage.AUTO.code))
+        set(value) = prefs.edit().putString(KEY_AGENT_LANGUAGE, value.code).apply()
+
     var autonomyMode: AgentAutonomyMode
         get() = AgentAutonomyMode.fromName(prefs.getString(KEY_AUTONOMY_MODE, AgentAutonomyMode.AGENT.name))
         set(value) = prefs.edit().putString(KEY_AUTONOMY_MODE, value.name).apply()
@@ -323,6 +394,7 @@ class AiConfigManager(context: Context) {
         private const val KEY_MODEL_PREFIX = "model_id_"
         private const val KEY_CUSTOM_MODELS_PREFIX = "custom_models_"
         private const val KEY_SAVED_PROFILES = "saved_ai_profiles_json"
+        private const val KEY_AGENT_LANGUAGE = "agent_language"
         private const val KEY_AUTONOMY_MODE = "autonomy_mode"
         private const val KEY_MAX_STEPS = "max_steps_per_run"
         private const val KEY_AUTO_BUILD_HEAL = "auto_build_and_heal"

@@ -160,7 +160,7 @@ object AgentOrchestrator {
                 val epochLabel = if (continuationEpoch > 1) " [Sesi $continuationEpoch/$maxContinuationEpochs]" else ""
                 dispatchStatus(scId, true, "Langkah $step/$maxSteps$epochLabel: Berpikir (${config.getModelId()})...", step, maxSteps)
 
-                val systemPrompt = buildSystemPrompt(scId, mode, activeScreenName, config.autoBuildAndHeal)
+                val systemPrompt = buildSystemPrompt(scId, mode, activeScreenName, config.autoBuildAndHeal, config.agentLanguage)
                 val compactedMessages = compactTurnMessages(turnMessages, aggressive = false)
 
                 val response = llmClient.generateTurn(
@@ -442,7 +442,8 @@ Fokus selesaikan task yang masih berstatus IN_PROGRESS atau PENDING (${unfinishe
         scId: String,
         mode: AgentAutonomyMode,
         activeScreenName: String?,
-        autoBuildAndHeal: Boolean
+        autoBuildAndHeal: Boolean,
+        language: pro.sketchware.ai.config.AgentLanguage
     ): String {
         val projectSummary = try {
             ProjectGateway.getProjectSummary(scId)
@@ -494,7 +495,7 @@ Fokus selesaikan task yang masih berstatus IN_PROGRESS atau PENDING (${unfinishe
         return """
             Anda adalah **Sketchware Pro Autonomous AI Agent**, arsitek & engineer Android senior yang tertanam langsung di dalam IDE Sketchware Pro.
             Anda memiliki kendali penuh atas mesin internal Sketchware Pro (`ViewBean`, `BlockBean`, `EventBean`, `ComponentBean`, `ProjectFileBean`, `ProjectBuilder`).
-            Selalu gunakan Bahasa Indonesia yang jelas, ramah, dan terstruktur saat berkomunikasi dengan pengguna.
+            ${language.systemPromptDirective()}
 
             === MODE OTONOMI SAAT INI: ${mode.name} (${mode.title}) ===
             Deskripsi Mode: ${mode.subtitle}

@@ -127,6 +127,11 @@ class AgentChatScreen(
     private lateinit var tvSlashPill: TextView
     private lateinit var tvModePill: TextView
     private lateinit var tvModelPill: TextView
+    private lateinit var tvLangPill: TextView
+    private lateinit var tvDisclaimer: TextView
+    private lateinit var tvEmptyTitle: TextView
+    private lateinit var tvEmptySub: TextView
+    private val suggestionTitleViews = mutableListOf<TextView>()
     // endregion
 
     // region State
@@ -262,13 +267,15 @@ class AgentChatScreen(
         root.addView(buildComposer(), lp(-1, -2).apply {
             leftMargin = dp(12); rightMargin = dp(12); topMargin = dp(6); bottomMargin = dp(4)
         })
-        root.addView(TextView(activity).apply {
-            text = "AI dapat keliru. Selalu periksa hasil build & logika."
+        val ui = pro.sketchware.ai.config.AiStrings.current(activity)
+        tvDisclaimer = TextView(activity).apply {
+            text = ui.disclaimerText
             textSize = 10.5f
             gravity = Gravity.CENTER
             setTextColor(cOnSurfaceVar)
             alpha = 0.7f
-        }, lp(-1, -2).apply { bottomMargin = dp(6) })
+        }
+        root.addView(tvDisclaimer, lp(-1, -2).apply { bottomMargin = dp(6) })
         return root
     }
 
@@ -316,6 +323,7 @@ class AgentChatScreen(
     }
 
     private fun buildEmptyState(): View {
+        val ui = pro.sketchware.ai.config.AiStrings.current(activity)
         val wrap = NestedScrollView(activity).apply { isFillViewport = true }
         val col = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -325,30 +333,32 @@ class AgentChatScreen(
         wrap.addView(col, ViewGroup.LayoutParams(-1, -1))
 
         col.addView(agentAvatar(48))
-        col.addView(TextView(activity).apply {
-            text = "Apa yang ingin kita bangun?"
+        tvEmptyTitle = TextView(activity).apply {
+            text = ui.emptyTitle
             textSize = 22f
             gravity = Gravity.CENTER
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             setTextColor(cOnSurface)
-        }, lp(-1, -2).apply { topMargin = dp(16) })
-        col.addView(TextView(activity).apply {
-            text = "Agent dapat merancang layar, menyusun blok logika, mengelola file & library, lalu compile dan memperbaiki error secara otomatis.\nProyek #$scId" +
-                (activeScreenName?.let { " · $it" } ?: "")
+        }
+        col.addView(tvEmptyTitle, lp(-1, -2).apply { topMargin = dp(16) })
+        tvEmptySub = TextView(activity).apply {
+            text = "${ui.emptySubtitle}\n#$scId" + (activeScreenName?.let { " · $it" } ?: "")
             textSize = 13f
             gravity = Gravity.CENTER
             setLineSpacing(0f, 1.2f)
             setTextColor(cOnSurfaceVar)
-        }, lp(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(20) })
+        }
+        col.addView(tvEmptySub, lp(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(20) })
 
+        suggestionTitleViews.clear()
         val suggestions = listOf(
-            Triple(R.drawable.ic_mtrl_deployed_code, "Bangun aplikasi dari 0",
+            Triple(R.drawable.ic_mtrl_deployed_code, ui.suggestionBuildZeroTitle,
                 "Rancang dan bangun aplikasi lengkap di proyek ini beserta UI modern, variabel, komponen, logika blok di setiap tombol/event, lalu jalankan save_and_verify_compile sampai sukses."),
-            Triple(R.drawable.ic_mtrl_bug_report, "Cek & perbaiki error",
+            Triple(R.drawable.ic_mtrl_bug_report, ui.suggestionFixErrorTitle,
                 "Periksa proyek ini, jalankan save_and_verify_compile, analisis jika ada compile error atau bug logika, dan perbaiki secara otomatis hingga build sukses."),
-            Triple(R.drawable.ic_mtrl_palette, "Percantik UI layar ini",
+            Triple(R.drawable.ic_mtrl_palette, ui.suggestionRedesignUiTitle,
                 "Baca XML layar ${activeScreenName ?: "main.xml"} saat ini, lalu desain ulang menjadi tampilan modern, rapi, dan proporsional tanpa merusak ID view yang sudah dipakai di blok logika."),
-            Triple(R.drawable.ic_mtrl_article, "Jelaskan proyek",
+            Triple(R.drawable.ic_mtrl_article, ui.suggestionExplainProjectTitle,
                 "Baca ringkasan proyek dan seluruh layar/event, lalu berikan penjelasan lengkap arsitektur proyek ini beserta saran pengembangan.")
         )
         for ((icon, title, prompt) in suggestions) {
@@ -364,11 +374,13 @@ class AgentChatScreen(
                 }
             }
             card.addView(tintedIcon(icon, cPrimary, 20))
-            card.addView(TextView(activity).apply {
+            val tvTitle = TextView(activity).apply {
                 text = title
                 textSize = 14f
                 setTextColor(cOnSurface)
-            }, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(12) })
+            }
+            suggestionTitleViews.add(tvTitle)
+            card.addView(tvTitle, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(12) })
             card.addView(tintedIcon(R.drawable.ic_mtrl_arrow_up, cOnSurfaceVar, 16).apply { rotation = 45f })
             col.addView(card, lp(-1, -2).apply { bottomMargin = dp(8) })
         }
@@ -746,7 +758,7 @@ class AgentChatScreen(
         }
         etPrompt = EditText(activity).apply {
             background = null
-            hint = "Ketik / untuk prompt cepat, atau tulis perintah…"
+            hint = pro.sketchware.ai.config.AiStrings.current(activity).composerHint
             textSize = 15f
             setTextColor(cOnSurface)
             setHintTextColor(ColorUtils.setAlphaComponent(cOnSurfaceVar, 170))
@@ -805,10 +817,18 @@ class AgentChatScreen(
         }.apply {
             text = "MCP · Plugin · Skill"
         }
+        tvLangPill = pill(R.drawable.ic_mtrl_settings) {
+            pro.sketchware.ai.config.AiStrings.showLanguagePickerDialog(activity) {
+                refreshHeader()
+            }
+        }.apply {
+            text = config.agentLanguage.shortBadge
+        }
         val pills = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         pills.addView(tvSlashPill)
         pills.addView(tvModePill, lp(-2, -2).apply { leftMargin = dp(6) })
         pills.addView(tvModelPill, lp(-2, -2).apply { leftMargin = dp(6) })
+        pills.addView(tvLangPill, lp(-2, -2).apply { leftMargin = dp(6) })
         pills.addView(tvExtensionsPill, lp(-2, -2).apply { leftMargin = dp(6) })
         val pillScroll = HorizontalScrollView(activity).apply {
             isHorizontalScrollBarEnabled = false
@@ -1137,12 +1157,13 @@ class AgentChatScreen(
         }
 
         fun refreshHeader() {
+            val ui = pro.sketchware.ai.config.AiStrings.current(activity)
             val running = steps.any { !it.done }
             val errors = errorCount
             headerText.text = when {
-                running -> "Mengerjakan · ${steps.size} langkah"
-                errors > 0 -> "${steps.size} langkah dijalankan · $errors gagal"
-                else -> "${steps.size} langkah dijalankan"
+                running -> String.format(ui.workingStepsFormat, steps.size)
+                errors > 0 -> String.format(ui.failedStepsFormat, steps.size, errors)
+                else -> String.format(ui.completedStepsFormat, steps.size)
             }
             headerIcon.imageTintList = ColorStateList.valueOf(if (errors > 0 && !running) cWarning else cOnSurfaceVar)
         }
@@ -1346,13 +1367,35 @@ class AgentChatScreen(
     }
 
     private fun refreshHeader() {
+        val ui = pro.sketchware.ai.config.AiStrings.current(activity)
         val configured = config.isConfigured()
         val mcp = if (SketchwareMcpServer.isRunning()) " · MCP :${SketchwareMcpServer.boundPort}" else ""
         val provider = config.providerType.name.lowercase().replaceFirstChar { it.uppercase() }
-        tvSubtitle.text = if (configured) "$provider · ${config.getModelId()}$mcp" else "Belum ada API key$mcp"
+        tvSubtitle.text = if (configured) "$provider · ${config.getModelId()}$mcp" else "${ui.noApiKeyText}$mcp"
         statusDot.background = oval(if (configured) cSuccess else cWarning)
-        tvModelPill.text = if (configured) config.getModelId() else "Atur model"
+        tvModelPill.text = if (configured) config.getModelId() else ui.configureModelText
         tvModePill.text = modeTitle(config.autonomyMode)
+        if (::tvLangPill.isInitialized) {
+            tvLangPill.text = config.agentLanguage.shortBadge
+        }
+        if (::etPrompt.isInitialized) {
+            etPrompt.hint = ui.composerHint
+        }
+        if (::tvDisclaimer.isInitialized) {
+            tvDisclaimer.text = ui.disclaimerText
+        }
+        if (::tvEmptyTitle.isInitialized) {
+            tvEmptyTitle.text = ui.emptyTitle
+        }
+        if (::tvEmptySub.isInitialized) {
+            tvEmptySub.text = "${ui.emptySubtitle}\n#$scId" + (activeScreenName?.let { " · $it" } ?: "")
+        }
+        if (suggestionTitleViews.size == 4) {
+            suggestionTitleViews[0].text = ui.suggestionBuildZeroTitle
+            suggestionTitleViews[1].text = ui.suggestionFixErrorTitle
+            suggestionTitleViews[2].text = ui.suggestionRedesignUiTitle
+            suggestionTitleViews[3].text = ui.suggestionExplainProjectTitle
+        }
     }
 
     // ------------------------------------------------------------------------------------------
@@ -1398,15 +1441,16 @@ class AgentChatScreen(
     }
 
     private fun confirmNewChat() {
+        val ui = pro.sketchware.ai.config.AiStrings.current(activity)
         if (isRunning) {
             SketchwareUtil.toast("Hentikan agent terlebih dahulu.")
             return
         }
         com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
-            .setTitle("Mulai percakapan baru?")
-            .setMessage("Riwayat chat dan rencana tugas proyek ini akan dihapus. Isi proyek tidak berubah.")
-            .setNegativeButton("Batal", null)
-            .setPositiveButton("Mulai baru") { _, _ ->
+            .setTitle(ui.newChatTitle)
+            .setMessage(ui.newChatConfirmMsg)
+            .setNegativeButton(ui.cancelText, null)
+            .setPositiveButton(ui.newChatStartBtn) { _, _ ->
                 AgentMemoryStore.clearSession(scId)
                 renderPlan(AgentPlan())
                 loadHistory()
@@ -1415,16 +1459,19 @@ class AgentChatScreen(
     }
 
     private fun showOverflow(anchor: View) {
+        val ui = pro.sketchware.ai.config.AiStrings.current(activity)
         PopupMenu(activity, anchor).apply {
-            menu.add(0, 1, 0, "Pengaturan API & MCP")
-            menu.add(0, 5, 1, "Ekosistem MCP, Plugin & Skill")
-            menu.add(0, 4, 2, "Terminal (Linux / Debian)")
-            menu.add(0, 6, 3, "Riwayat Checkpoint & Rollback")
-            menu.add(0, 2, 4, "Salin seluruh percakapan")
-            menu.add(0, 3, 5, "Percakapan baru")
+            menu.add(0, 1, 0, ui.menuSettings)
+            menu.add(0, 7, 1, "${ui.menuLanguage} (${config.agentLanguage.shortBadge})")
+            menu.add(0, 5, 2, ui.menuExtensions)
+            menu.add(0, 4, 3, ui.menuTerminal)
+            menu.add(0, 6, 4, ui.menuCheckpoints)
+            menu.add(0, 2, 5, ui.menuCopyTranscript)
+            menu.add(0, 3, 6, ui.newChatStartBtn)
             setOnMenuItemClickListener {
                 when (it.itemId) {
                     1 -> AiSettingsDialog.show(activity) { refreshHeader() }
+                    7 -> pro.sketchware.ai.config.AiStrings.showLanguagePickerDialog(activity) { refreshHeader() }
                     5 -> ExtensionsHubDialog.show(
                         context = activity,
                         initialTab = 0,
@@ -1436,7 +1483,7 @@ class AgentChatScreen(
                     )
                     4 -> TerminalScreen.show(activity, scId)
                     6 -> showCheckpointsDialog()
-                    2 -> copy(exportTranscript(), "Percakapan disalin")
+                    2 -> copy(exportTranscript(), ui.copiedToast)
                     3 -> confirmNewChat()
                 }
                 true
@@ -1508,7 +1555,7 @@ class AgentChatScreen(
                 if (selected) setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             })
             texts.addView(TextView(activity).apply {
-                text = mode.subtitle
+                text = pro.sketchware.ai.config.AiStrings.modeSubtitle(mode, config.agentLanguage)
                 textSize = 12f
                 setTextColor(cOnSurfaceVar)
             })
