@@ -75,6 +75,7 @@ Mendukung berbagai penyedia model AI dengan manajemen *profile* dan penyimpanan 
 | **Library & Resource** | `manage_local_libraries`, `manage_project_resources` | Mengaktifkan *local library*, mengunduh artefak Maven/AAR/JAR beserta dependensi transitif + kompilasi `classes.jar` → `classes.dex` via R8/D8, membuat Vector Drawable XML, serta mengimpor gambar/font/sound/asset. |
 | **Keamanan & Build** | `manage_checkpoints`, `build_and_verify_project`, `capture_runtime_logs` | Membuat & memulihkan *snapshot checkpoint* sebelum perubahan besar, menjalankan kompilasi penuh (`aapt2` → `ecj/kotlinc` → `d8` → `apkbuilder`), dan menangkap `logcat` runtime. |
 | **Sistem & Web** | `run_terminal_command`, `web_search`, `web_fetch` | Menjalankan perintah shell di Android / Alpine / Debian, mencari referensi di web, dan mengambil dokumentasi/API eksternal. |
+| **DeerFlow 2.0 Sub-Agent & Artifacts** | `delegate_subagent`, `manage_artifacts` | Mendelegasikan tugas investigasi/audit ke *Sub-Agent* terisolasi (`researcher`, `ui_architect`, `block_auditor`, `compile_debugger`) dan mengelola *deliverable* di panel **📦 Artifacts**. |
 
 ### 5. 🔌 Ekosistem MCP Server, MCP Client, Skills & Plugins
 - **Internal MCP Server (`127.0.0.1:8765`)**: Mengekspos seluruh tool Sketchware melalui protokol JSON-RPC 2.0 (`initialize`, `tools/list`, `tools/call`) sehingga agen eksternal via ADB atau terminal lokal dapat mengontrol proyek secara *real-time*.
@@ -82,17 +83,17 @@ Mendukung berbagai penyedia model AI dengan manajemen *profile* dan penyimpanan 
 - **Skills (`SKILL.md`) & Dynamic Plugins**: Mendukung pemasangan instruksi keahlian khusus dan *custom tool* berbasis HTTP webhook atau *shell template*.
 
 ### 6. 🌍 Dukungan Multi-Bahasa Global (17 Bahasa + Auto System Locale)
-Mendukung pengguna dari seluruh negara dengan pengaturan bahasa instan (tersedia melalui tombol pill **🌐 Language** di bilah bawah chat maupun di dalam **Pengaturan AI Agent Studio**) yang mengubah bahasa antarmuka **dan** menginstruksikan AI Agent untuk selalu merespons dalam bahasa pilihan pengguna:
+Mendukung pengguna dari seluruh negara dengan pengaturan bahasa instan (tersedia melalui *Workspace Sidebar* maupun di dalam **Pengaturan AI Agent Studio**) yang mengubah bahasa antarmuka **dan** menginstruksikan AI Agent untuk selalu merespons dalam bahasa pilihan pengguna:
 - **🌐 Auto (System Default)** — Otomatis mengikuti bahasa bawaan perangkat Android atau bahasa pesan pengguna.
 - **🇺🇸 English** · **🇮🇩 Bahasa Indonesia** · **🇪🇸 Español** · **🇧🇷 Português** · **🇸🇦 العربية** · **🇮🇳 हिन्दी** · **🇷🇺 Русский** · **🇨🇳 中文 (简体)** · **🇯🇵 日本語** · **🇰🇷 한국어** · **🇫🇷 Français** · **🇩🇪 Deutsch** · **🇹🇷 Türkçe** · **🇻🇳 Tiếng Việt** · **🇹🇭 ไทย** · **🇲🇾 Bahasa Melayu**
 
-### 7. ➕ Tombol `+` ("Add Context") Terpadu Gaya Antigravity
-Tombol **`+` (Add Context)** di pojok kiri bawah *composer bar* menyatukan seluruh konteks file dan kontrol agen dalam satu *Bottom Sheet* modern:
-- **📄 Tambahkan File**: Melampirkan file kode/teks/konfigurasi dari perangkat atau direktori proyek (`@project`, `@mysc`, `@libs`, `/sdcard`, `Download`) langsung ke konteks AI Agent.
-- **📁 Tambahkan Folder**: Melampirkan struktur pohon direktori beserta cuplikan isi file penting di dalamnya.
-- **📦 Tambahkan File APK (Support File APK)**: Melakukan inspeksi struktur internal `.apk` secara otomatis (`AndroidManifest.xml`, jumlah `classes.dex`, daftar layout, drawable, asset, & native libraries `.so`) agar agen dapat menganalisis atau memodifikasi APK.
-- **🖼️ Tambahkan Gambar**: Melampirkan *screenshot*/mockup UI atau aset gambar beserta resolusi dimensinya, dilengkapi opsi **Impor otomatis ke `@drawable` proyek**.
-- **⚡ Prompt Cepat (`/`) & 🤖 Mode Agent**: Akses cepat ke template perintah *slash* dan pemilihan 5 mode otonomi agen dalam satu menu terpadu.
+### 7. 🦌 Desain UI/UX Workspace Gaya ByteDance DeerFlow 2.0 & Menu `+` ("Add Context")
+Antarmuka **AI Agent Studio** dirancang ulang mengikuti arsitektur *open-source* **[ByteDance DeerFlow 2.0](https://github.com/bytedance/deer-flow)**:
+- **Palet Warna Warm Cream & Charcoal (`DeerFlowTheme`)**: Mengadopsi token warna *shadcn/oklch* DeerFlow 2.0 dengan aksen emas khusus untuk mode **Autopilot · Ultra**.
+- **Collapsible Workspace Sidebar**: Panel navigasi samping untuk berpindah cepat antara **New chat**, **Chats**, **📦 Artifacts**, **Agent modes** (`Read-only`, `Flash`, `Pro`, `Ultra`, `Guide`), **Skills**, **Plugins**, **MCP connectors**, **Terminal**, **Checkpoints**, serta daftar **Recent prompts** untuk melompat langsung ke riwayat instruksi di dalam percakapan.
+- **Welcome Screen Interaktif (`AuroraText` + Centered Input Box)**: Sapaan animasi gradien *Aurora* (`👋 Halo, mari membangun!` / `🚀 Mode Ultra siap!`), kotak input mengambang di tengah layar saat percakapan baru dimulai, serta deretan chip aksi cepat (**Bangun**, **Perbaiki**, **Desain**, **Pelajari**, dan menu **Buat ▾**: *Layar baru, Logika blok, Library Maven, Skill baru*).
+- **Panel 📦 Artifacts & To-dos Terintegrasi**: Kartu **To-dos** yang bertumpuk rapi di atas kotak input untuk memantau progres rencana kerja agen, serta tombol **📦 Artifacts** dengan *badge* penghitung *real-time* di bilah atas untuk melihat, menyalin, atau melampirkan file hasil kerja agen (APK hasil kompilasi, Layout XML, kode Java, & dokumen spesifikasi).
+- **Tombol `+` ("Add Context") di Kiri Bawah**: Menyatukan **Tambahkan File**, **Tambahkan Folder**, **Tambahkan File APK** (lengkap dengan inspeksi otomatis `AndroidManifest.xml`, `classes.dex`, layout, drawable, & native libs `.so`), **Tambahkan Gambar** (dengan impor sekali klik ke `@drawable`), **Prompt Cepat (`/`)**, dan **Mode Agent**.
 
 ---
 

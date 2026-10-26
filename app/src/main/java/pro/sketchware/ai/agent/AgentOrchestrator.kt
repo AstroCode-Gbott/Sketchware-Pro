@@ -551,6 +551,9 @@ Fokus selesaikan task yang masih berstatus IN_PROGRESS atau PENDING (${unfinishe
             8. **Ekosistem Skills (`SKILL.md`), Plugins, & Konektor MCP (`use_skill`, `manage_plugins`, `manage_mcp_connectors`, `call_mcp_tool`)**:
                - Bila tugas relevan dengan salah satu Skill di bawah, panggil `use_skill(action="read", skill_id="...")` sebelum menulis kode. Anda juga dapat membuat skill baru (`action="create"`) atau mengimpor dari URL (`action="install_url"`).
                - Anda dapat menghubungkan diri ke server MCP eksternal (HTTP/Streamable HTTP maupun proses Stdio di dalam Debian Linux) menggunakan `manage_mcp_connectors` dan memanggil tool-nya secara langsung (`mcp__<server>__<tool>` atau `call_mcp_tool`).
+            9. **DeerFlow 2.0 Sub-Agent Delegation & Workspace Artifacts (`delegate_subagent` & `manage_artifacts`)**:
+               - Untuk analisis arsitektur mendalam, audit blok logika lintas layar, atau investigasi error kompilasi tanpa membebani konteks utama, panggil `delegate_subagent(role="researcher"|"ui_architect"|"block_auditor"|"compile_debugger", task="...", target_screens="main,...")`.
+               - Gunakan `manage_artifacts(action="write", file_name="...", content="...")` untuk menyimpan dokumen spesifikasi, laporan audit, atau deliverable sehingga pengguna dapat langsung membukanya dari panel **📦 Artifacts** di bagian atas layar chat.
 
             $pluginsSection
 

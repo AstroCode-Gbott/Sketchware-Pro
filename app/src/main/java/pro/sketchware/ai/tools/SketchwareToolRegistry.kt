@@ -505,6 +505,26 @@ Actions:
                 ToolParameterProperty("arguments_json", "string", "JSON object of arguments to pass to the MCP tool.", required = false)
             ),
             isWriteTool = false
+        ),
+        ToolDefinition(
+            name = "manage_artifacts",
+            description = """DeerFlow Workspace Artifacts Manager — list, read, write, or delete tangible deliverables (.md, .html, .json, .xml, .svg, scripts, reports) in the project's Artifacts panel (.sketchware/data/<sc_id>/ai_artifacts/), as well as inspect compiled APKs, layouts, and custom Java sources.""",
+            parameters = listOf(
+                ToolParameterProperty("action", "string", "Action: 'list', 'read', 'write', or 'delete'.", required = true, enumValues = listOf("list", "read", "write", "delete")),
+                ToolParameterProperty("file_name", "string", "Artifact file name (e.g. 'architecture_plan.md', 'ui_preview.html') or absolute path.", required = false),
+                ToolParameterProperty("content", "string", "Content to write when action='write'.", required = false)
+            ),
+            isWriteTool = false
+        ),
+        ToolDefinition(
+            name = "delegate_subagent",
+            description = """DeerFlow Ultra/Pro Sub-Agent Delegation — spawn a specialized sub-agent ('researcher', 'ui_architect', 'block_auditor', 'compile_debugger') with an isolated context window to inspect project screens, logic, or architecture and return a concise report without bloating the main conversation context.""",
+            parameters = listOf(
+                ToolParameterProperty("role", "string", "Specialist role: 'researcher', 'ui_architect', 'block_auditor', or 'compile_debugger'.", required = true, enumValues = listOf("researcher", "ui_architect", "block_auditor", "compile_debugger")),
+                ToolParameterProperty("task", "string", "Clear, specific task or question for the sub-agent to investigate and report on.", required = true),
+                ToolParameterProperty("target_screens", "string", "Optional comma-separated screen names (e.g. 'main,login') to preload into the sub-agent context.", required = false)
+            ),
+            isWriteTool = false
         )
     )
 
@@ -1192,6 +1212,92 @@ Actions:
                     onProgressUpdate?.invoke("Memanggil MCP [$serverId :: $rTool]…")
                     val out = McpClientHub.callRemoteTool(serverId, rTool, callArgs)
                     OutputSpiller.maybeSpill(scId, "mcp_${serverId}_$rTool", out)
+                }
+
+                "manage_artifacts" -> {
+                    val action = args.str("action").ifBlank { "list" }.lowercase()
+                    val fileName = args.str("file_name")
+                    val content = args.str("content")
+                    when (action) {
+                        "list" -> {
+                            val items = pro.sketchware.ai.ui.WorkspaceArtifactsManager.collectArtifacts(scId)
+                            if (items.isEmpty()) {
+                                "Belum ada artifact di proyek #$scId."
+                            } else {
+                                buildString {
+                                    appendLine("=== Workspace Artifacts (#$scId · ${items.size} items) ===")
+                                    items.forEachIndexed { idx, it ->
+                                        appendLine("${idx + 1}. [${it.category}] ${it.title} (${it.badge}) -> ${it.file.absolutePath}")
+                                    }
+                                }.trim()
+                            }
+                        }
+                        "write" -> {
+                            if (fileName.isBlank()) return "Error: parameter 'file_name' wajib diisi untuk action='write'."
+                            val saved = pro.sketchware.ai.ui.WorkspaceArtifactsManager.writeDeliverable(scId, fileName, content)
+                            "Artifact '${saved.name}' berhasil disimpan (${saved.length()} bytes) di ${saved.absolutePath} dan tampil di panel Artifacts."
+                        }
+                        "read" -> {
+                            if (fileName.isBlank()) return "Error: parameter 'file_name' wajib diisi untuk action='read'."
+                            val direct = File(fileName)
+                            val f = if (direct.isAbsolute && direct.isFile) {
+                                direct
+                            } else {
+                                File(pro.sketchware.ai.ui.WorkspaceArtifactsManager.artifactsDir(scId), fileName)
+                            }
+                            if (!f.exists() || !f.isFile) {
+                                return "Error: Artifact '$fileName' tidak ditemukan."
+                            }
+                            OutputSpiller.maybeSpill(scId, "artifact_${f.name}", f.readText())
+                        }
+                        "delete" -> {
+                            val f = File(pro.sketchware.ai.ui.WorkspaceArtifactsManager.artifactsDir(scId), fileName)
+                            if (f.exists() && f.delete()) {
+                                "Artifact '${f.name}' berhasil dihapus."
+                            } else {
+                                "Error: Artifact '$fileName' tidak ditemukan di ai_artifacts."
+                            }
+                        }
+                        else -> "Error: action '$action' tidak dikenal pada manage_artifacts."
+                    }
+                }
+
+                "delegate_subagent" -> {
+                    val role = args.str("role").ifBlank { "researcher" }
+                    val task = args.str("task")
+                    val targetScreens = args.str("target_screens")
+                    if (task.isBlank()) return "Error: parameter 'task' wajib diisi untuk delegate_subagent."
+                    onProgressUpdate?.invoke("Sub-Agent [$role] menganalisis tugas…")
+                    val ctxBuilder = StringBuilder()
+                    ctxBuilder.appendLine("=== Project Summary (#$scId) ===")
+                    ctxBuilder.appendLine(ProjectGateway.getProjectSummary(scId))
+                    if (targetScreens.isNotBlank()) {
+                        targetScreens.split(',').map { it.trim() }.filter { it.isNotEmpty() }.take(4).forEach { scr ->
+                            ctxBuilder.appendLine("\n=== Screen State: $scr ===")
+                            ctxBuilder.appendLine(ProjectGateway.getScreenStateDetails(scId, scr))
+                            ctxBuilder.appendLine("\n=== Layout XML: $scr ===")
+                            ctxBuilder.appendLine(ProjectGateway.readScreenXml(context, scId, scr).take(4000))
+                        }
+                    }
+                    val cfg = pro.sketchware.ai.config.AiConfigManager(context)
+                    if (cfg.isConfigured()) {
+                        try {
+                            val subSystem = """You are a specialized DeerFlow Sub-Agent ($role) working inside Sketchware Pro for project #$scId.
+Analyze the provided project context and answer the Lead Agent's task concisely with actionable findings, exact view/block/event IDs, and concrete recommendations."""
+                            val subPrompt = "Task from Lead Agent:\n$task\n\nWorkspace Context:\n$ctxBuilder"
+                            val resp = pro.sketchware.ai.provider.LlmClient(cfg).generateTurn(
+                                systemPrompt = subSystem,
+                                messages = listOf(pro.sketchware.ai.provider.LlmTurnMessage(role = "user", content = subPrompt)),
+                                tools = emptyList()
+                            )
+                            val report = resp.text.ifBlank { "Sub-agent selesai memeriksa konteks." }
+                            "=== Sub-Agent Report [$role] ===\n$report"
+                        } catch (e: Throwable) {
+                            "=== Sub-Agent Local Inspection [$role] (Fallback: ${e.message}) ===\n$ctxBuilder"
+                        }
+                    } else {
+                        "=== Sub-Agent Local Inspection [$role] ===\n$ctxBuilder"
+                    }
                 }
 
                 else -> {

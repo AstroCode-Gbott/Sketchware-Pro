@@ -67,14 +67,21 @@ import java.util.UUID
 import com.google.android.material.R as MR
 
 /**
- * Full-screen agentic chat surface for the on-device Sketchware AI Agent.
+ * Full-screen DeerFlow 2.0-inspired agentic workspace for the on-device Sketchware AI Agent.
  *
- * Layout (top → bottom):
- *  - Top bar: close, title + model/connection status, new chat, overflow.
- *  - Conversation: user bubbles, markdown assistant replies, grouped collapsible tool-step timelines,
- *    status notes, error cards and a live "thinking" indicator.
- *  - Pinned task plan (collapsible checklist with progress).
- *  - Composer: multi-line input, autonomy-mode picker, model pill and a send/stop button.
+ * Architecture & UX (modeled after https://github.com/bytedance/deer-flow):
+ *  - Warm cream / warm charcoal shadcn-oklch palette ([DeerFlowTheme]) with gold "Ultra" accents.
+ *  - Collapsible Workspace Sidebar: brand header, "+ New chat", Workspace links (Chats, Artifacts,
+ *    Agent modes, Skills, Plugins, MCP connectors, Terminal, Checkpoints), Recent prompts jump-list,
+ *    and footer actions (Settings, Language, Close studio).
+ *  - Workspace Header: sidebar trigger, dynamic thread title + status dot, Artifacts drawer button
+ *    with live deliverable badge, New chat button, and overflow menu.
+ *  - Welcome Mode: animated "👋 Hello, again!" / "🚀 Ultra mode is ready!" with AuroraText gradient
+ *    sweep, centered floating Input Box, and horizontal suggestion chips (Build, Fix, Design, Learn, Create ▾).
+ *  - Execution Stream: user bubbles, markdown assistant replies, collapsible grouped tool timelines
+ *    with special badges for Sub-Agent delegation (`delegate_subagent`) & active Skills (`use_skill`),
+ *    and a 3-dot bouncing streaming indicator.
+ *  - Stacked "To-dos" card directly above the floating Input Box.
  */
 class AgentChatScreen(
     private val activity: Activity,
@@ -84,21 +91,27 @@ class AgentChatScreen(
     private val config = AiConfigManager(activity)
     private val dialog = Dialog(activity, android.R.style.Theme_DeviceDefault_NoActionBar)
 
-    // region Theme
+    // region Theme (DeerFlow 2.0 warm cream / charcoal palette)
     private fun attr(id: Int) = ThemeUtils.getColor(activity, id)
-    private val cSurface = attr(MR.attr.colorSurface)
-    private val cSurfaceLow = attr(MR.attr.colorSurfaceContainerLow)
-    private val cSurfaceCont = attr(MR.attr.colorSurfaceContainer)
-    private val cSurfaceHigh = attr(MR.attr.colorSurfaceContainerHigh)
-    private val cOnSurface = attr(MR.attr.colorOnSurface)
-    private val cOnSurfaceVar = attr(MR.attr.colorOnSurfaceVariant)
-    private val cOutline = attr(MR.attr.colorOutlineVariant)
-    private val cPrimary = attr(R.attr.colorPrimary)
-    private val cOnPrimary = attr(MR.attr.colorOnPrimary)
-    private val cError = attr(R.attr.colorError)
-    private val isDark = ColorUtils.calculateLuminance(cSurface) < 0.5
-    private val cSuccess = if (isDark) Color.parseColor("#4ADE80") else Color.parseColor("#16A34A")
-    private val cWarning = if (isDark) Color.parseColor("#FBBF24") else Color.parseColor("#D97706")
+    private val isDark = ColorUtils.calculateLuminance(attr(MR.attr.colorSurface)) < 0.5
+    private val deer = DeerFlowTheme.palette(isDark)
+    private val cSurface = deer.background
+    private val cSurfaceLow = deer.muted
+    private val cSurfaceCont = deer.card
+    private val cSurfaceHigh = deer.secondary
+    private val cOnSurface = deer.foreground
+    private val cOnSurfaceVar = deer.mutedForeground
+    private val cOutline = deer.border
+    private val cPrimary = deer.primary
+    private val cOnPrimary = deer.primaryForeground
+    private val cError = deer.destructive
+    private val cSuccess = deer.success
+    private val cWarning = deer.warning
+    private val cGold = deer.gold
+    private val cPopover = deer.popover
+    private val cSidebar = deer.sidebar
+    private val cSidebarAccent = deer.sidebarAccent
+    private val tx get() = DeerText(config.agentLanguage)
     // endregion
 
     // region Views
@@ -128,12 +141,28 @@ class AgentChatScreen(
     private lateinit var attachmentsScroll: HorizontalScrollView
     private lateinit var attachmentsRow: LinearLayout
     private lateinit var tvModelPill: TextView
-    private lateinit var tvLangPill: TextView
     private lateinit var tvDisclaimer: TextView
-    private lateinit var tvEmptyTitle: TextView
     private lateinit var tvEmptySub: TextView
     private val suggestionTitleViews = mutableListOf<TextView>()
     private val attachedContexts = mutableListOf<AttachedContextItem>()
+
+    // DeerFlow workspace shell views
+    private lateinit var tvThreadTitle: TextView
+    private lateinit var tvArtifactsBadge: TextView
+    private lateinit var tvModePill: TextView
+    private lateinit var configBanner: View
+    private lateinit var composerBox: View
+    private lateinit var bottomComposerSlot: LinearLayout
+    private lateinit var welcomeComposerSlot: LinearLayout
+    private lateinit var tvGreeting: TextView
+    private lateinit var tvGreetingEmoji: TextView
+    private lateinit var sidebarPanel: LinearLayout
+    private lateinit var sidebarScrim: View
+    private lateinit var sidebarRecentList: LinearLayout
+    private var sidebarOpen = false
+    private var auroraAnimator: ValueAnimator? = null
+    private val dotAnimators = mutableListOf<ObjectAnimator>()
+    private val userMessageViews = mutableListOf<Pair<String, View>>()
     // endregion
 
     // region State
@@ -196,9 +225,19 @@ class AgentChatScreen(
         refreshHeader()
 
         AgentOrchestrator.addListener(listener)
+        dialog.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == android.view.KeyEvent.KEYCODE_BACK && sidebarOpen) {
+                if (event.action == android.view.KeyEvent.ACTION_UP) closeSidebar()
+                true
+            } else {
+                false
+            }
+        }
         dialog.setOnDismissListener {
             AgentOrchestrator.removeListener(listener)
             pulse?.cancel()
+            auroraAnimator?.cancel()
+            dotAnimators.forEach { it.cancel() }
         }
         dialog.show()
     }
@@ -209,15 +248,19 @@ class AgentChatScreen(
     }
 
     // ------------------------------------------------------------------------------------------
-    // Layout
+    // DeerFlow Workspace Shell & Sidebar
     // ------------------------------------------------------------------------------------------
 
     private fun buildRoot(): View {
-        val root = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
+        val frame = FrameLayout(activity).apply {
             setBackgroundColor(cSurface)
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
+        val root = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(cSurface)
+        }
+        frame.addView(root, FrameLayout.LayoutParams(-1, -1))
         root.addView(buildTopBar())
         root.addView(View(activity).apply { setBackgroundColor(cOutline) }, lp(-1, 1))
 
@@ -231,7 +274,7 @@ class AgentChatScreen(
         }
         messages = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(12), dp(16), dp(16))
+            setPadding(dp(18), dp(16), dp(18), dp(20))
         }
         scroll.addView(messages, ViewGroup.LayoutParams(-1, -2))
         body.addView(scroll, FrameLayout.LayoutParams(-1, -1))
@@ -241,7 +284,7 @@ class AgentChatScreen(
         emptyState = buildEmptyState()
         body.addView(emptyState, FrameLayout.LayoutParams(-1, -1))
 
-        jumpButton = circleIconButton(R.drawable.ic_mtrl_arrow_down, cSurfaceHigh, cOnSurface, 36) {
+        jumpButton = circleIconButton(R.drawable.ic_mtrl_arrow_down, cSurfaceCont, cOnSurface, 36) {
             stickToBottom = true
             scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
         }.apply {
@@ -261,14 +304,26 @@ class AgentChatScreen(
         })
 
         root.addView(buildSlashPanel(), lp(-1, -2).apply {
-            leftMargin = dp(12); rightMargin = dp(12); topMargin = dp(4)
+            leftMargin = dp(14); rightMargin = dp(14); topMargin = dp(4)
         })
-        root.addView(buildPlanPanel(), lp(-1, -2).apply {
-            leftMargin = dp(12); rightMargin = dp(12); topMargin = dp(4)
+
+        configBanner = buildConfigBanner()
+        root.addView(configBanner, lp(-1, -2).apply {
+            leftMargin = dp(14); rightMargin = dp(14); topMargin = dp(6)
         })
-        root.addView(buildComposer(), lp(-1, -2).apply {
-            leftMargin = dp(12); rightMargin = dp(12); topMargin = dp(6); bottomMargin = dp(4)
+
+        bottomComposerSlot = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
+        bottomComposerSlot.addView(buildPlanPanel(), lp(-1, -2).apply {
+            leftMargin = dp(14); rightMargin = dp(14); bottomMargin = -dp(16)
         })
+        composerBox = buildComposer()
+        bottomComposerSlot.addView(composerBox, composerLp())
+        root.addView(bottomComposerSlot, lp(-1, -2).apply { topMargin = dp(6) })
+
         val ui = pro.sketchware.ai.config.AiStrings.current(activity)
         tvDisclaimer = TextView(activity).apply {
             text = ui.disclaimerText
@@ -277,37 +332,61 @@ class AgentChatScreen(
             setTextColor(cOnSurfaceVar)
             alpha = 0.7f
         }
-        root.addView(tvDisclaimer, lp(-1, -2).apply { bottomMargin = dp(6) })
-        return root
+        root.addView(tvDisclaimer, lp(-1, -2).apply { topMargin = dp(2); bottomMargin = dp(6) })
+
+        // Sidebar overlay (scrim + sliding panel)
+        sidebarScrim = View(activity).apply {
+            setBackgroundColor(Color.argb(if (isDark) 150 else 90, 0, 0, 0))
+            visibility = View.GONE
+            alpha = 0f
+            isClickable = true
+            setOnClickListener { closeSidebar() }
+        }
+        frame.addView(sidebarScrim, FrameLayout.LayoutParams(-1, -1))
+        sidebarPanel = buildSidebar()
+        frame.addView(sidebarPanel, FrameLayout.LayoutParams(sidebarWidth(), -1, Gravity.START))
+        return frame
     }
+
+    private fun composerLp() = LinearLayout.LayoutParams(-1, -2).apply {
+        leftMargin = dp(12); rightMargin = dp(12); bottomMargin = dp(4)
+    }
+
+    private fun sidebarWidth() = minOf(dp(300), (activity.resources.displayMetrics.widthPixels * 0.84f).toInt())
 
     private fun buildTopBar(): View {
         val bar = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), dp(6), dp(4), dp(6))
-            minimumHeight = dp(56)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            minimumHeight = dp(54)
         }
-        bar.addView(iconButton(R.drawable.ic_mtrl_close, "Tutup") { dialog.dismiss() })
+        bar.addView(iconButton(R.drawable.ic_mtrl_sidebar, tx.workspace) { openSidebar() })
 
         val titleCol = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(4), 0, dp(4), 0)
+            isClickable = true
+            background = ripple(rounded(Color.TRANSPARENT, 10f))
+            setOnClickListener { openSidebar() }
         }
-        titleCol.addView(TextView(activity).apply {
-            text = "Sketchware Agent"
-            textSize = 16.5f
+        tvThreadTitle = TextView(activity).apply {
+            text = tx.newChat
+            textSize = 15.5f
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             setTextColor(cOnSurface)
-        })
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        titleCol.addView(tvThreadTitle)
         val subRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
         statusDot = View(activity).apply { background = oval(cSuccess) }
-        subRow.addView(statusDot, lp(dp(7), dp(7)).apply { rightMargin = dp(6) })
+        subRow.addView(statusDot, lp(dp(6), dp(6)).apply { rightMargin = dp(6) })
         tvSubtitle = TextView(activity).apply {
-            textSize = 12f
+            textSize = 11.5f
             setTextColor(cOnSurfaceVar)
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
@@ -316,92 +395,515 @@ class AgentChatScreen(
         titleCol.addView(subRow)
         bar.addView(titleCol, LinearLayout.LayoutParams(0, -2, 1f))
 
-        bar.addView(iconButton(R.drawable.ic_mtrl_terminal, "Terminal Linux / Debian") { TerminalScreen.show(activity, scId) })
-        bar.addView(iconButton(R.drawable.ic_mtrl_edit, "Percakapan baru") { confirmNewChat() })
+        // Artifacts button with live counter badge (DeerFlow "Show artifacts of this conversation")
+        val artifactsBtn = FrameLayout(activity).apply {
+            contentDescription = tx.artifacts
+            isClickable = true
+            background = RippleDrawable(ColorStateList.valueOf(ColorUtils.setAlphaComponent(cOnSurface, 30)), null, null)
+            addView(tintedIcon(R.drawable.ic_mtrl_package, cOnSurface, 21), FrameLayout.LayoutParams(dp(21), dp(21), Gravity.CENTER))
+            setOnClickListener { showArtifactsSheet() }
+        }
+        tvArtifactsBadge = TextView(activity).apply {
+            textSize = 9f
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(cOnPrimary)
+            gravity = Gravity.CENTER
+            minWidth = dp(15)
+            setPadding(dp(3), 0, dp(3), 0)
+            background = rounded(cPrimary, 8f)
+            visibility = View.GONE
+        }
+        artifactsBtn.addView(tvArtifactsBadge, FrameLayout.LayoutParams(-2, dp(15), Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(7); rightMargin = dp(6)
+        })
+        bar.addView(artifactsBtn, lp(dp(44), dp(44)))
+        bar.addView(iconButton(R.drawable.ic_mtrl_terminal, tx.terminal) { TerminalScreen.show(activity, scId) })
+        bar.addView(iconButton(R.drawable.ic_mtrl_edit, tx.newChat) { confirmNewChat() })
         lateinit var more: View
-        more = iconButton(R.drawable.ic_mtrl_more_vertical, "Lainnya") { showOverflow(more) }
+        more = iconButton(R.drawable.ic_mtrl_more_vertical, "More") { showOverflow(more) }
         bar.addView(more)
         return bar
     }
 
+    private fun buildConfigBanner(): View {
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(8), dp(8), dp(8))
+            background = rounded(ColorUtils.setAlphaComponent(cWarning, 26), 12f, ColorUtils.setAlphaComponent(cWarning, 90))
+            visibility = View.GONE
+        }
+        row.addView(tintedIcon(R.drawable.ic_mtrl_warning, cWarning, 16))
+        row.addView(TextView(activity).apply {
+            text = tx.modelNotConfigured
+            textSize = 12.5f
+            setTextColor(cOnSurface)
+        }, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) })
+        row.addView(TextView(activity).apply {
+            text = tx.configureNow
+            textSize = 12.5f
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(cOnSurface)
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+            background = ripple(rounded(Color.TRANSPARENT, 10f, cOutline))
+            isClickable = true
+            setOnClickListener { AiSettingsDialog.show(activity) { refreshHeader() } }
+        })
+        return row
+    }
+
+    private fun buildSidebar(): LinearLayout {
+        val panel = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(cSidebar)
+            elevation = dp(12).toFloat()
+            visibility = View.GONE
+            isClickable = true
+        }
+        val brand = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(12), dp(4), dp(8))
+        }
+        brand.addView(agentAvatar(30))
+        val brandCol = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        brandCol.addView(TextView(activity).apply {
+            text = "Sketchware Agent"
+            textSize = 15.5f
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(cOnSurface)
+        })
+        brandCol.addView(TextView(activity).apply {
+            text = "DeerFlow 2.0 Workspace"
+            textSize = 11f
+            setTextColor(cOnSurfaceVar)
+        })
+        brand.addView(brandCol, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(10) })
+        brand.addView(iconButton(R.drawable.ic_mtrl_sidebar, "Close sidebar") { closeSidebar() })
+        panel.addView(brand)
+
+        val newChat = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = ripple(rounded(cSurfaceCont, 12f, cOutline))
+            isClickable = true
+            setOnClickListener { closeSidebar(); confirmNewChat() }
+        }
+        newChat.addView(tintedIcon(R.drawable.ic_mtrl_edit, cOnSurface, 17))
+        newChat.addView(TextView(activity).apply {
+            text = tx.newChat
+            textSize = 13.5f
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(cOnSurface)
+        }, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(10) })
+        panel.addView(newChat, lp(-1, -2).apply { leftMargin = dp(12); rightMargin = dp(12); bottomMargin = dp(6) })
+
+        val navScroll = NestedScrollView(activity).apply { isVerticalScrollBarEnabled = false }
+        val nav = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(4), dp(8), dp(8))
+        }
+        navScroll.addView(nav, ViewGroup.LayoutParams(-1, -2))
+        panel.addView(navScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        nav.addView(sidebarSection(tx.workspace))
+        nav.addView(sidebarItem(R.drawable.ic_mtrl_chat, tx.chats, selected = true) { closeSidebar() })
+        nav.addView(sidebarItem(R.drawable.ic_mtrl_package, tx.artifacts) { closeSidebar(); showArtifactsSheet() })
+        nav.addView(sidebarItem(R.drawable.ic_mtrl_tune, tx.agentModes, trailing = "${modeTitle(config.autonomyMode)} · ${DeerFlowTheme.modeTag(config.autonomyMode)}") {
+            closeSidebar(); showModePicker()
+        })
+        nav.addView(sidebarItem(R.drawable.ic_mtrl_star, tx.skills) { closeSidebar(); openExtensions(2) })
+        nav.addView(sidebarItem(R.drawable.ic_mtrl_puzzle, tx.plugins) { closeSidebar(); openExtensions(1) })
+        nav.addView(sidebarItem(R.drawable.ic_mtrl_link, tx.mcp) { closeSidebar(); openExtensions(0) })
+        nav.addView(sidebarItem(R.drawable.ic_mtrl_terminal, tx.terminal) { closeSidebar(); TerminalScreen.show(activity, scId) })
+        nav.addView(sidebarItem(R.drawable.ic_mtrl_history, tx.checkpoints) { closeSidebar(); showCheckpointsDialog() })
+
+        nav.addView(sidebarSection(tx.recent), lp(-1, -2).apply { topMargin = dp(10) })
+        sidebarRecentList = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        nav.addView(sidebarRecentList, lp(-1, -2))
+
+        panel.addView(View(activity).apply { setBackgroundColor(cOutline) }, lp(-1, 1))
+        val footer = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(6), dp(8), dp(8))
+        }
+        footer.addView(sidebarItem(R.drawable.ic_mtrl_settings, tx.settings) {
+            closeSidebar(); AiSettingsDialog.show(activity) { refreshHeader() }
+        })
+        footer.addView(sidebarItem(R.drawable.ic_mtrl_web, tx.language, trailing = config.agentLanguage.shortBadge) {
+            closeSidebar()
+            pro.sketchware.ai.config.AiStrings.showLanguagePickerDialog(activity) { rebuildSidebar(); refreshHeader() }
+        })
+        footer.addView(sidebarItem(R.drawable.ic_mtrl_exit, tx.closeStudio) { closeSidebar(); dialog.dismiss() })
+        panel.addView(footer)
+        return panel
+    }
+
+    private fun rebuildSidebar() {
+        if (!::sidebarPanel.isInitialized) return
+        val parent = sidebarPanel.parent as? FrameLayout ?: return
+        val idx = parent.indexOfChild(sidebarPanel)
+        parent.removeView(sidebarPanel)
+        sidebarPanel = buildSidebar()
+        parent.addView(sidebarPanel, idx, FrameLayout.LayoutParams(sidebarWidth(), -1, Gravity.START))
+    }
+
+    private fun sidebarSection(title: String): View = TextView(activity).apply {
+        text = title
+        textSize = 11.5f
+        setTextColor(cOnSurfaceVar)
+        setPadding(dp(10), dp(8), dp(10), dp(4))
+    }
+
+    private fun sidebarItem(
+        iconRes: Int,
+        label: String,
+        selected: Boolean = false,
+        trailing: String? = null,
+        onClick: () -> Unit
+    ): View {
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(9), dp(10), dp(9))
+            background = ripple(rounded(if (selected) cSidebarAccent else Color.TRANSPARENT, 10f))
+            isClickable = true
+            setOnClickListener { onClick() }
+        }
+        row.addView(tintedIcon(iconRes, if (selected) cOnSurface else cOnSurfaceVar, 18))
+        row.addView(TextView(activity).apply {
+            text = label
+            textSize = 13.5f
+            setTextColor(cOnSurface)
+            if (selected) setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(12) })
+        if (!trailing.isNullOrBlank()) {
+            row.addView(TextView(activity).apply {
+                text = trailing
+                textSize = 11f
+                setTextColor(cOnSurfaceVar)
+                setPadding(dp(7), dp(1), dp(7), dp(1))
+                background = rounded(Color.TRANSPARENT, 8f, cOutline)
+                maxLines = 1
+            })
+        }
+        return row
+    }
+
+    private fun refreshSidebarRecent() {
+        if (!::sidebarRecentList.isInitialized) return
+        sidebarRecentList.removeAllViews()
+        if (userMessageViews.isEmpty()) {
+            sidebarRecentList.addView(TextView(activity).apply {
+                text = tx.noRecent
+                textSize = 12f
+                setTextColor(cOnSurfaceVar)
+                setPadding(dp(10), dp(6), dp(10), dp(6))
+            })
+            return
+        }
+        for ((text, view) in userMessageViews.asReversed().take(40)) {
+            val row = TextView(activity).apply {
+                this.text = text.lineSequence().firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+                textSize = 13f
+                setTextColor(cOnSurface)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                setPadding(dp(10), dp(8), dp(10), dp(8))
+                background = ripple(rounded(Color.TRANSPARENT, 10f))
+                isClickable = true
+                setOnClickListener {
+                    closeSidebar()
+                    stickToBottom = false
+                    scroll.post { scroll.smoothScrollTo(0, (view.top - dp(12)).coerceAtLeast(0)) }
+                }
+            }
+            sidebarRecentList.addView(row, lp(-1, -2))
+        }
+    }
+
+    private fun openSidebar() {
+        if (sidebarOpen) return
+        sidebarOpen = true
+        hideKeyboard()
+        refreshSidebarRecent()
+        val w = sidebarWidth().toFloat()
+        sidebarScrim.visibility = View.VISIBLE
+        sidebarScrim.animate().alpha(1f).setDuration(180).start()
+        sidebarPanel.visibility = View.VISIBLE
+        sidebarPanel.translationX = -w
+        sidebarPanel.animate().translationX(0f).setDuration(220)
+            .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+    }
+
+    private fun closeSidebar() {
+        if (!sidebarOpen) return
+        sidebarOpen = false
+        val w = sidebarWidth().toFloat()
+        sidebarScrim.animate().alpha(0f).setDuration(160).withEndAction { sidebarScrim.visibility = View.GONE }.start()
+        sidebarPanel.animate().translationX(-w).setDuration(180)
+            .withEndAction { sidebarPanel.visibility = View.GONE }.start()
+    }
+
+    private fun openExtensions(tab: Int) {
+        ExtensionsHubDialog.show(
+            context = activity,
+            initialTab = tab,
+            onUsePrompt = { promptText ->
+                prefill(promptText)
+                focusComposer()
+            },
+            onChanged = { refreshHeader() }
+        )
+    }
+
+    private fun showArtifactsSheet() {
+        WorkspaceArtifactsManager.showArtifactsSheet(
+            activity = activity,
+            scId = scId,
+            palette = deer,
+            tx = tx,
+            onAttachToChat = { addContextAttachment(it) }
+        )
+    }
+
+    private fun refreshArtifactsBadge() {
+        if (!::tvArtifactsBadge.isInitialized) return
+        val count = try {
+            WorkspaceArtifactsManager.collectArtifacts(scId).size
+        } catch (_: Throwable) {
+            0
+        }
+        if (count > 0) {
+            tvArtifactsBadge.text = if (count > 99) "99+" else count.toString()
+            tvArtifactsBadge.visibility = View.VISIBLE
+        } else {
+            tvArtifactsBadge.visibility = View.GONE
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // DeerFlow Welcome Screen (AuroraText + Centered Input Box + Suggestion Chips)
+    // ------------------------------------------------------------------------------------------
+
     private fun buildEmptyState(): View {
-        val ui = pro.sketchware.ai.config.AiStrings.current(activity)
-        val wrap = NestedScrollView(activity).apply { isFillViewport = true }
+        val wrap = NestedScrollView(activity).apply {
+            isFillViewport = true
+            setBackgroundColor(cSurface)
+            isVerticalScrollBarEnabled = false
+        }
         val col = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL or Gravity.CENTER_VERTICAL
-            setPadding(dp(24), dp(24), dp(24), dp(24))
+            setPadding(dp(8), dp(24), dp(8), dp(24))
+            clipChildren = false
+            clipToPadding = false
         }
         wrap.addView(col, ViewGroup.LayoutParams(-1, -1))
 
-        col.addView(agentAvatar(48))
-        tvEmptyTitle = TextView(activity).apply {
-            text = ui.emptyTitle
-            textSize = 22f
+        val greetRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
+        }
+        tvGreetingEmoji = TextView(activity).apply {
+            text = "👋"
+            textSize = 26f
+            includeFontPadding = false
+        }
+        greetRow.addView(tvGreetingEmoji)
+        tvGreeting = TextView(activity).apply {
+            textSize = 26f
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             setTextColor(cOnSurface)
-        }
-        col.addView(tvEmptyTitle, lp(-1, -2).apply { topMargin = dp(16) })
-        tvEmptySub = TextView(activity).apply {
-            text = "${ui.emptySubtitle}\n#$scId" + (activeScreenName?.let { " · $it" } ?: "")
-            textSize = 13f
+            includeFontPadding = false
             gravity = Gravity.CENTER
-            setLineSpacing(0f, 1.2f)
+        }
+        greetRow.addView(tvGreeting, lp(-2, -2).apply { leftMargin = dp(10) })
+        col.addView(greetRow, lp(-1, -2).apply { leftMargin = dp(16); rightMargin = dp(16) })
+
+        tvEmptySub = TextView(activity).apply {
+            textSize = 13.5f
+            gravity = Gravity.CENTER
+            setLineSpacing(0f, 1.25f)
             setTextColor(cOnSurfaceVar)
         }
-        col.addView(tvEmptySub, lp(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(20) })
+        col.addView(tvEmptySub, lp(-1, -2).apply {
+            topMargin = dp(10); bottomMargin = dp(22); leftMargin = dp(20); rightMargin = dp(20)
+        })
 
-        suggestionTitleViews.clear()
-        val suggestions = listOf(
-            Triple(R.drawable.ic_mtrl_deployed_code, ui.suggestionBuildZeroTitle,
-                "Rancang dan bangun aplikasi lengkap di proyek ini beserta UI modern, variabel, komponen, logika blok di setiap tombol/event, lalu jalankan save_and_verify_compile sampai sukses."),
-            Triple(R.drawable.ic_mtrl_bug_report, ui.suggestionFixErrorTitle,
-                "Periksa proyek ini, jalankan save_and_verify_compile, analisis jika ada compile error atau bug logika, dan perbaiki secara otomatis hingga build sukses."),
-            Triple(R.drawable.ic_mtrl_palette, ui.suggestionRedesignUiTitle,
-                "Baca XML layar ${activeScreenName ?: "main.xml"} saat ini, lalu desain ulang menjadi tampilan modern, rapi, dan proporsional tanpa merusak ID view yang sudah dipakai di blok logika."),
-            Triple(R.drawable.ic_mtrl_article, ui.suggestionExplainProjectTitle,
-                "Baca ringkasan proyek dan seluruh layar/event, lalu berikan penjelasan lengkap arsitektur proyek ini beserta saran pengembangan.")
-        )
-        for ((icon, title, prompt) in suggestions) {
-            val card = LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(14), dp(12), dp(14), dp(12))
-                background = ripple(rounded(cSurfaceLow, 14f, cOutline))
-                isClickable = true
-                setOnClickListener {
-                    prefill(prompt)
-                    focusComposer()
-                }
-            }
-            card.addView(tintedIcon(icon, cPrimary, 20))
-            val tvTitle = TextView(activity).apply {
-                text = title
-                textSize = 14f
-                setTextColor(cOnSurface)
-            }
-            suggestionTitleViews.add(tvTitle)
-            card.addView(tvTitle, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(12) })
-            card.addView(tintedIcon(R.drawable.ic_mtrl_arrow_up, cOnSurfaceVar, 16).apply { rotation = 45f })
-            col.addView(card, lp(-1, -2).apply { bottomMargin = dp(8) })
+        welcomeComposerSlot = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
         }
+        col.addView(welcomeComposerSlot, lp(-1, -2))
+
+        // Suggestion chips (DeerFlow: Build · Fix · Design · Learn · Create ▾)
+        suggestionTitleViews.clear()
+        val chipsRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(12), 0, dp(12), 0)
+        }
+        val chipsScroll = HorizontalScrollView(activity).apply {
+            isHorizontalScrollBarEnabled = false
+            isFillViewport = true
+            addView(chipsRow, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL))
+        }
+        val screen = activeScreenName ?: "main.xml"
+        val chips = listOf(
+            Triple(R.drawable.ic_mtrl_deployed_code, { tx.chipBuild },
+                "Rancang dan bangun aplikasi lengkap di proyek ini beserta UI modern, variabel, komponen, logika blok di setiap tombol/event, lalu jalankan save_and_verify_compile sampai sukses."),
+            Triple(R.drawable.ic_mtrl_bug_report, { tx.chipFix },
+                "Periksa proyek ini, jalankan save_and_verify_compile, analisis jika ada compile error atau bug logika, dan perbaiki secara otomatis hingga build sukses."),
+            Triple(R.drawable.ic_mtrl_palette, { tx.chipDesign },
+                "Baca XML layar $screen saat ini, lalu desain ulang menjadi tampilan modern, rapi, dan proporsional tanpa merusak ID view yang sudah dipakai di blok logika."),
+            Triple(R.drawable.ic_mtrl_article, { tx.chipLearn }, null)
+        )
+        for ((icon, label, prompt) in chips) {
+            val chip = suggestionChip(icon, label()) {
+                prefill(prompt ?: tx.promptLearn)
+                focusComposer()
+            }
+            chipsRow.addView(chip, lp(-2, -2).apply { rightMargin = dp(8) })
+        }
+        lateinit var createChip: View
+        createChip = suggestionChip(R.drawable.ic_mtrl_add_circle, tx.chipCreate + "  ▾") { showCreateMenu(createChip) }
+        chipsRow.addView(createChip, lp(-2, -2))
+        col.addView(chipsScroll, lp(-1, -2).apply { topMargin = dp(14) })
+
+        refreshWelcomeTexts()
         return wrap
     }
+
+    private fun suggestionChip(iconRes: Int, label: String, onClick: () -> Unit): View {
+        val chip = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(7), dp(14), dp(7))
+            background = ripple(rounded(Color.TRANSPARENT, 18f, cOutline))
+            isClickable = true
+            setOnClickListener { onClick() }
+        }
+        chip.addView(tintedIcon(iconRes, cOnSurfaceVar, 15))
+        val tv = TextView(activity).apply {
+            text = label
+            textSize = 13f
+            setTextColor(cOnSurface)
+            maxLines = 1
+        }
+        suggestionTitleViews.add(tv)
+        chip.addView(tv, lp(-2, -2).apply { leftMargin = dp(6) })
+        return chip
+    }
+
+    private fun showCreateMenu(anchor: View) {
+        val t = tx
+        PopupMenu(activity, anchor).apply {
+            menu.add(0, 1, 0, t.createScreen)
+            menu.add(0, 2, 1, t.createLogic)
+            menu.add(0, 3, 2, t.createLibrary)
+            menu.add(0, 4, 3, t.createSkill)
+            setOnMenuItemClickListener {
+                prefill(
+                    when (it.itemId) {
+                        1 -> t.promptCreateScreen
+                        2 -> t.promptCreateLogic
+                        3 -> t.promptCreateLibrary
+                        else -> t.promptCreateSkill
+                    }
+                )
+                focusComposer()
+                true
+            }
+        }.show()
+    }
+
+    private fun refreshWelcomeTexts() {
+        if (!::tvGreeting.isInitialized) return
+        val t = tx
+        val ultra = config.autonomyMode == AgentAutonomyMode.AUTOPILOT
+        tvGreetingEmoji.text = if (ultra) "🚀" else "👋"
+        tvGreeting.text = if (ultra) t.greetingUltra else t.greeting
+        tvEmptySub.text = "${t.welcomeDesc}\n\n${t.projectLabel} #$scId" + (activeScreenName?.let { " · $it" } ?: "")
+        if (suggestionTitleViews.size >= 5) {
+            suggestionTitleViews[0].text = t.chipBuild
+            suggestionTitleViews[1].text = t.chipFix
+            suggestionTitleViews[2].text = t.chipDesign
+            suggestionTitleViews[3].text = t.chipLearn
+            suggestionTitleViews[4].text = t.chipCreate + "  ▾"
+        }
+        applyAurora(
+            tvGreeting,
+            if (ultra) intArrayOf(deer.goldPale, deer.goldLight, deer.gold, deer.goldLight)
+            else intArrayOf(cOnSurface, ColorUtils.blendARGB(cOnSurface, cOnSurfaceVar, 0.55f), cOnSurface)
+        )
+    }
+
+    private fun applyAurora(tv: TextView, colors: IntArray) {
+        auroraAnimator?.cancel()
+        tv.post {
+            val w = tv.paint.measureText(tv.text.toString()).coerceAtLeast(1f)
+            val shader = android.graphics.LinearGradient(
+                0f, 0f, w, 0f, colors + colors.first(), null, android.graphics.Shader.TileMode.MIRROR
+            )
+            val matrix = android.graphics.Matrix()
+            tv.paint.shader = shader
+            tv.invalidate()
+            auroraAnimator = ValueAnimator.ofFloat(0f, w * 2f).apply {
+                duration = 6000
+                repeatCount = ValueAnimator.INFINITE
+                repeatMode = ValueAnimator.REVERSE
+                addUpdateListener { a ->
+                    matrix.setTranslate(a.animatedValue as Float, 0f)
+                    shader.setLocalMatrix(matrix)
+                    tv.invalidate()
+                }
+                start()
+            }
+        }
+        if (::tvGreetingEmoji.isInitialized) {
+            tvGreetingEmoji.pivotX = tvGreetingEmoji.width * 0.7f
+            tvGreetingEmoji.pivotY = tvGreetingEmoji.height * 0.9f
+            ObjectAnimator.ofFloat(tvGreetingEmoji, "rotation", 0f, 20f, 0f, 20f, 0f).apply {
+                duration = 1200
+                startDelay = 250
+                start()
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Streaming Indicator & Stacked To-dos Card
+    // ------------------------------------------------------------------------------------------
 
     private fun buildThinkingRow(): LinearLayout {
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(10), 0, dp(4))
+            setPadding(dp(2), dp(10), 0, dp(4))
             visibility = View.GONE
         }
-        row.addView(CircularProgressIndicator(activity).apply {
-            isIndeterminate = true
-            indicatorSize = dp(16)
-            trackThickness = dp(2)
-            setIndicatorColor(cPrimary)
-        }, lp(-2, -2))
+        val dots = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(4), 0, 0)
+        }
+        dotAnimators.clear()
+        repeat(3) { i ->
+            val dot = View(activity).apply { background = oval(cOnSurface) }
+            dots.addView(dot, lp(dp(6), dp(6)).apply { if (i > 0) leftMargin = dp(4) })
+            dotAnimators.add(ObjectAnimator.ofFloat(dot, "translationY", 0f, -dp(5).toFloat()).apply {
+                duration = 450
+                startDelay = i * 150L
+                repeatMode = ValueAnimator.REVERSE
+                repeatCount = ValueAnimator.INFINITE
+            })
+        }
+        row.addView(dots, lp(-2, dp(14)))
         tvThinking = TextView(activity).apply {
             text = "Berpikir…"
             textSize = 13f
@@ -409,11 +911,13 @@ class AgentChatScreen(
             maxLines = 2
             ellipsize = TextUtils.TruncateAt.END
         }
-        row.addView(tvThinking, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(10) })
+        row.addView(tvThinking, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(12) })
         tvThinkingStep = TextView(activity).apply {
             textSize = 11f
             setTextColor(cOnSurfaceVar)
             typeface = Typeface.MONOSPACE
+            setPadding(dp(7), dp(1), dp(7), dp(1))
+            background = rounded(Color.TRANSPARENT, 8f, cOutline)
         }
         row.addView(tvThinkingStep, lp(-2, -2).apply { leftMargin = dp(8) })
         pulse = ObjectAnimator.ofFloat(tvThinking, "alpha", 1f, 0.45f).apply {
@@ -427,13 +931,19 @@ class AgentChatScreen(
     private fun buildPlanPanel(): View {
         planPanel = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            background = rounded(cSurfaceLow, 14f, cOutline)
+            background = GradientDrawable().apply {
+                val r = dp(16f).toFloat()
+                cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                setColor(cSurfaceLow)
+                setStroke(maxOf(1, dp(1f)), cOutline)
+            }
+            setPadding(0, 0, 0, dp(16))
             visibility = View.GONE
         }
         val header = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(10), dp(8), dp(10))
+            setPadding(dp(14), dp(9), dp(8), dp(7))
             background = ripple(null)
             isClickable = true
             setOnClickListener {
@@ -441,10 +951,10 @@ class AgentChatScreen(
                 applyPlanExpansion()
             }
         }
-        header.addView(tintedIcon(R.drawable.ic_mtrl_checklist, cPrimary, 18))
+        header.addView(tintedIcon(R.drawable.ic_mtrl_checklist, cOnSurface, 16))
         val col = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         planHeaderTitle = TextView(activity).apply {
-            textSize = 13f
+            textSize = 12.5f
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             setTextColor(cOnSurface)
             maxLines = 1
@@ -459,19 +969,19 @@ class AgentChatScreen(
         col.addView(planHeaderTitle)
         col.addView(planHeaderSub)
         header.addView(col, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(10) })
-        planChevron = tintedIcon(R.drawable.ic_mtrl_chevron_right_24, cOnSurfaceVar, 20).apply { rotation = -90f }
+        planChevron = tintedIcon(R.drawable.ic_mtrl_chevron_right_24, cOnSurfaceVar, 18).apply { rotation = -90f }
         header.addView(planChevron)
         planPanel.addView(header)
 
         planProgress = LinearProgressIndicator(activity).apply {
             isIndeterminate = false
             max = 100
-            trackThickness = dp(3)
-            trackCornerRadius = dp(2)
-            setIndicatorColor(cPrimary)
+            trackThickness = dp(2)
+            trackCornerRadius = dp(1)
+            setIndicatorColor(cOnSurface)
             trackColor = cSurfaceHigh
         }
-        planPanel.addView(planProgress, lp(-1, -2).apply { leftMargin = dp(12); rightMargin = dp(12); bottomMargin = dp(2) })
+        planPanel.addView(planProgress, lp(-1, -2).apply { leftMargin = dp(14); rightMargin = dp(14); bottomMargin = dp(2) })
 
         planListScroll = NestedScrollView(activity).apply {
             visibility = View.GONE
@@ -479,7 +989,7 @@ class AgentChatScreen(
         }
         planList = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(6), dp(12), dp(10))
+            setPadding(dp(14), dp(6), dp(14), dp(6))
         }
         planListScroll.addView(planList, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         planPanel.addView(planListScroll, lp(-1, 0))
@@ -515,6 +1025,10 @@ class AgentChatScreen(
         }
     }
 
+    // ------------------------------------------------------------------------------------------
+    // Slash Commands & Floating Input Box
+    // ------------------------------------------------------------------------------------------
+
     private data class SlashCommandItem(
         val command: String,
         val title: String,
@@ -546,6 +1060,13 @@ class AgentChatScreen(
                 subtitle = "Desain ulang XML layar saat ini agar modern & rapi tanpa merusak ID view",
                 iconRes = R.drawable.ic_mtrl_palette,
                 prompt = "Baca XML layar $screen saat ini, lalu desain ulang menjadi tampilan modern, rapi, dan proporsional tanpa merusak ID view yang sudah dipakai di blok logika."
+            ),
+            SlashCommandItem(
+                command = "/subagent-audit",
+                title = "Delegasi Sub-Agent: Audit Arsitektur & Blok",
+                subtitle = "Jalankan sub-agent terisolasi (DeerFlow Ultra) untuk mengaudit layar & logika",
+                iconRes = R.drawable.ic_mtrl_team,
+                prompt = "Gunakan delegate_subagent(role=\"block_auditor\", task=\"Periksa seluruh layar, komponen, dan blok logika di proyek ini, lalu buat laporan temuan & rekomendasi arsitektur\"), kemudian simpan laporannya ke panel Artifacts menggunakan manage_artifacts(action=\"write\", file_name=\"audit_report.md\")."
             ),
             SlashCommandItem(
                 command = "/audit",
@@ -602,7 +1123,7 @@ class AgentChatScreen(
                     command = "/skill:${sk.id}",
                     title = "Skill: ${sk.name}",
                     subtitle = sk.description,
-                    iconRes = R.drawable.ic_mtrl_article,
+                    iconRes = R.drawable.ic_mtrl_star,
                     prompt = "Gunakan skill '${sk.id}' (panggil use_skill(action=\"read\", skill_id=\"${sk.id}\")) untuk menyelesaikan tugas di proyek ini."
                 )
             }
@@ -752,14 +1273,20 @@ class AgentChatScreen(
         }
     }
 
+    /**
+     * DeerFlow-style floating input box:
+     *  [attachments]
+     *  textarea ("How can I assist you today?")
+     *  [+ add context] [mode ▾ (Flash/Pro/Ultra)] [model ▾] ............ [● send]
+     */
     private fun buildComposer(): View {
         val box = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            background = rounded(cSurfaceCont, 24f, cOutline)
+            background = rounded(cSurfaceCont, 22f, ColorUtils.blendARGB(cOutline, cOnSurfaceVar, 0.18f))
+            elevation = dp(if (isDark) 0 else 3).toFloat()
             setPadding(dp(12), dp(6), dp(8), dp(8))
         }
 
-        // Attached Context Chips Row (File / Folder / APK / Image)
         attachmentsRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -777,11 +1304,12 @@ class AgentChatScreen(
             hint = pro.sketchware.ai.config.AiStrings.current(activity).composerHint
             textSize = 15f
             setTextColor(cOnSurface)
-            setHintTextColor(ColorUtils.setAlphaComponent(cOnSurfaceVar, 170))
-            minLines = 1
-            maxLines = 6
+            setHintTextColor(ColorUtils.setAlphaComponent(cOnSurfaceVar, 190))
+            minLines = 2
+            maxLines = 7
+            gravity = Gravity.TOP or Gravity.START
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            setPadding(dp(2), dp(10), dp(2), dp(6))
+            setPadding(dp(4), dp(10), dp(4), dp(6))
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -798,63 +1326,105 @@ class AgentChatScreen(
             gravity = Gravity.CENTER_VERTICAL
         }
 
-        // Bottom-Left "+" (Add Context) Icon Button — unifies File, Folder, APK, Image, Quick Prompt, and Agent Mode
+        // Bottom-left "+" (Add Context): File, Folder, APK, Image, Quick Prompt, Agent Mode
         btnAddContext = FrameLayout(activity).apply {
             isClickable = true
             contentDescription = "Add Context"
             ViewCompat.setTooltipText(this, "Add Context")
-            background = ripple(oval(cSurfaceHigh))
-            addView(tintedIcon(R.drawable.ic_mtrl_add, cPrimary, 20), FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
+            background = ripple(GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.TRANSPARENT)
+                setStroke(maxOf(1, dp(1f)), cOutline)
+            })
+            addView(tintedIcon(R.drawable.ic_mtrl_add, cOnSurface, 18), FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER))
             setOnClickListener { showAddContextSheet() }
         }
-        actions.addView(btnAddContext, lp(dp(36), dp(36)).apply { rightMargin = dp(8) })
+        actions.addView(btnAddContext, lp(dp(32), dp(32)).apply { rightMargin = dp(6) })
 
-        tvModelPill = pill(R.drawable.ic_mtrl_bulb) {
+        tvModePill = ghostPill(R.drawable.ic_mtrl_sprint) { showModePicker() }
+        tvModelPill = ghostPill(R.drawable.ic_mtrl_bulb) {
             AiSettingsDialog.show(activity) { refreshHeader() }
         }
-        val tvExtensionsPill = pill(R.drawable.ic_mtrl_folder_code) {
-            ExtensionsHubDialog.show(
-                context = activity,
-                initialTab = 0,
-                onUsePrompt = { promptText ->
-                    prefill(promptText)
-                    focusComposer()
-                },
-                onChanged = { refreshHeader() }
-            )
-        }.apply {
-            text = "MCP · Plugin · Skill"
+        val pills = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
-        tvLangPill = pill(R.drawable.ic_mtrl_web) {
-            pro.sketchware.ai.config.AiStrings.showLanguagePickerDialog(activity) {
-                refreshHeader()
-            }
-        }.apply {
-            text = config.agentLanguage.shortBadge
-        }
-        val pills = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
-        pills.addView(tvModelPill)
-        pills.addView(tvLangPill, lp(-2, -2).apply { leftMargin = dp(6) })
-        pills.addView(tvExtensionsPill, lp(-2, -2).apply { leftMargin = dp(6) })
+        pills.addView(tvModePill)
+        pills.addView(tvModelPill, lp(-2, -2).apply { leftMargin = dp(2) })
         val pillScroll = HorizontalScrollView(activity).apply {
             isHorizontalScrollBarEnabled = false
             addView(pills)
         }
         actions.addView(pillScroll, LinearLayout.LayoutParams(0, -2, 1f))
 
-        ivSend = tintedIcon(R.drawable.ic_mtrl_arrow_up, cOnPrimary, 20)
+        ivSend = tintedIcon(R.drawable.ic_mtrl_arrow_up, cOnPrimary, 18)
         btnSend = FrameLayout(activity).apply {
             isClickable = true
             contentDescription = "Kirim"
-            addView(ivSend, FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
+            addView(ivSend, FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER))
             setOnClickListener {
                 if (isRunning) AgentOrchestrator.cancelRun() else submit(etPrompt.text?.toString().orEmpty())
             }
         }
-        actions.addView(btnSend, lp(dp(38), dp(38)).apply { leftMargin = dp(8) })
+        actions.addView(btnSend, lp(dp(34), dp(34)).apply { leftMargin = dp(8) })
         box.addView(actions, lp(-1, -2))
         updateSendButton()
         return box
+    }
+
+    private fun ghostPill(iconRes: Int, onClick: () -> Unit): TextView = TextView(activity).apply {
+        textSize = 12.5f
+        setTextColor(cOnSurfaceVar)
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        maxWidth = dp(165)
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(8), dp(6), dp(8), dp(6))
+        compoundDrawablePadding = dp(5)
+        val d = activity.getDrawable(iconRes)?.mutate()
+        d?.setTint(cOnSurfaceVar)
+        d?.setBounds(0, 0, dp(15), dp(15))
+        val chev = activity.getDrawable(R.drawable.ic_mtrl_chevron_right_24)?.mutate()
+        chev?.setTint(cOnSurfaceVar)
+        chev?.setBounds(0, 0, dp(13), dp(13))
+        setCompoundDrawables(d, null, chev, null)
+        background = ripple(rounded(Color.TRANSPARENT, 14f))
+        isClickable = true
+        setOnClickListener { onClick() }
+    }
+
+    private fun modeIcon(mode: AgentAutonomyMode) = when (mode) {
+        AgentAutonomyMode.ASK -> R.drawable.ic_mtrl_help
+        AgentAutonomyMode.COPILOT -> R.drawable.ic_mtrl_sprint
+        AgentAutonomyMode.AGENT -> R.drawable.ic_mtrl_bulb
+        AgentAutonomyMode.AUTOPILOT -> R.drawable.ic_mtrl_deployed_code
+        AgentAutonomyMode.TUTOR -> R.drawable.ic_mtrl_article
+    }
+
+    private fun refreshModePill() {
+        if (!::tvModePill.isInitialized) return
+        val mode = config.autonomyMode
+        val ultra = mode == AgentAutonomyMode.AUTOPILOT
+        val color = if (ultra) cGold else cOnSurfaceVar
+        tvModePill.text = "${modeTitle(mode)} · ${DeerFlowTheme.modeTag(mode)}"
+        tvModePill.setTextColor(color)
+        if (ultra) tvModePill.setTypeface(Typeface.DEFAULT, Typeface.BOLD) else tvModePill.typeface = Typeface.DEFAULT
+        val d = activity.getDrawable(modeIcon(mode))?.mutate()
+        d?.setTint(color)
+        d?.setBounds(0, 0, dp(15), dp(15))
+        val chev = activity.getDrawable(R.drawable.ic_mtrl_chevron_right_24)?.mutate()
+        chev?.setTint(color)
+        chev?.setBounds(0, 0, dp(13), dp(13))
+        tvModePill.setCompoundDrawables(d, null, chev, null)
+    }
+
+    private fun placeComposer(welcome: Boolean) {
+        if (!::composerBox.isInitialized || !::welcomeComposerSlot.isInitialized) return
+        val target = if (welcome) welcomeComposerSlot else bottomComposerSlot
+        if (composerBox.parent === target) return
+        (composerBox.parent as? ViewGroup)?.removeView(composerBox)
+        target.addView(composerBox, composerLp())
+        if (::tvDisclaimer.isInitialized) tvDisclaimer.visibility = if (welcome) View.GONE else View.VISIBLE
     }
 
     private fun addContextAttachment(item: AttachedContextItem) {
@@ -877,7 +1447,7 @@ class AgentChatScreen(
             val chip = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                background = rounded(cSurfaceHigh, 14f, cPrimary)
+                background = rounded(cSurfaceHigh, 14f, cOutline)
                 setPadding(dp(10), dp(5), dp(8), dp(5))
             }
             chip.addView(tintedIcon(item.iconRes(), cPrimary, 15))
@@ -905,7 +1475,7 @@ class AgentChatScreen(
     }
 
     // ------------------------------------------------------------------------------------------
-    // Rendering
+    // Conversation Rendering
     // ------------------------------------------------------------------------------------------
 
     private fun loadHistory() {
@@ -913,6 +1483,7 @@ class AgentChatScreen(
         renderedCount = 0
         currentGroup = null
         allGroups.clear()
+        userMessageViews.clear()
         val entries = AgentMemoryStore.loadChatEntries(scId)
         val start = (entries.size - historyLimit).coerceAtLeast(0)
         if (start > 0) {
@@ -922,17 +1493,17 @@ class AgentChatScreen(
                 gravity = Gravity.CENTER
                 setTextColor(cPrimary)
                 setPadding(dp(12), dp(8), dp(12), dp(8))
-                background = ripple(rounded(cSurfaceLow, 16f))
+                background = ripple(rounded(cSurfaceLow, 16f, cOutline))
                 isClickable = true
             }
             more.setOnClickListener { loadAll(entries) }
             messages.addView(more, lp(-2, -2).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(8) })
         }
         for (i in start until entries.size) renderEntry(entries[i], live = false)
-        // Collapse finished tool groups except the latest one for a compact history.
         allGroups.dropLast(1).forEach { it.setExpanded(false) }
         ensureThinkingRowLast()
         updateEmptyState()
+        refreshArtifactsBadge()
         scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
     }
 
@@ -941,6 +1512,7 @@ class AgentChatScreen(
         renderedCount = 0
         currentGroup = null
         allGroups.clear()
+        userMessageViews.clear()
         entries.forEach { renderEntry(it, live = false) }
         allGroups.dropLast(1).forEach { it.setExpanded(false) }
         ensureThinkingRowLast()
@@ -951,7 +1523,8 @@ class AgentChatScreen(
         when (entry.type) {
             ChatEntryType.TOOL_CALL -> {
                 val group = currentGroup ?: newGroup()
-                group.add(ToolStep(toolNameOf(entry.title, "Tool Call:"), entry.body))
+                val tName = toolNameOf(entry.title, "Tool Call:")
+                group.add(ToolStep(tName, entry.body))
             }
 
             ChatEntryType.TOOL_RESULT -> {
@@ -961,18 +1534,26 @@ class AgentChatScreen(
                     pending.complete(entry.body, looksLikeError(entry.body))
                     currentGroup?.refreshHeader()
                 } else {
-                    // External MCP agent action or orphan result: show as a completed step.
                     val group = currentGroup ?: newGroup()
                     val step = ToolStep(entry.title.replace("??", "").trim(), "")
                     group.add(step)
                     step.complete(entry.body, looksLikeError(entry.body))
                     group.refreshHeader()
                 }
+                if (live) refreshArtifactsBadge()
             }
 
             ChatEntryType.USER -> {
                 closeGroup(live)
-                addMessageView(userBubble(entry.body))
+                val v = userBubble(entry.body)
+                addMessageView(v)
+                val cleanLine = entry.body.lineSequence().firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+                if (cleanLine.isNotEmpty()) {
+                    userMessageViews.add(cleanLine to v)
+                    if (userMessageViews.size == 1 && ::tvThreadTitle.isInitialized) {
+                        tvThreadTitle.text = cleanLine
+                    }
+                }
             }
 
             ChatEntryType.ASSISTANT -> {
@@ -987,7 +1568,6 @@ class AgentChatScreen(
             }
 
             ChatEntryType.ERROR -> {
-                // External agent tool errors arrive as ERROR with a "[agent] tool" title: keep them in the timeline.
                 if (entry.title.contains("[") && entry.title.contains("]")) {
                     val group = currentGroup ?: newGroup()
                     val step = ToolStep(entry.title.replace("??", "").trim(), "")
@@ -1029,23 +1609,29 @@ class AgentChatScreen(
     }
 
     private fun updateEmptyState() {
-        emptyState.visibility = if (renderedCount == 0 && !isRunning) View.VISIBLE else View.GONE
+        val empty = renderedCount == 0 && !isRunning
+        emptyState.visibility = if (empty) View.VISIBLE else View.GONE
+        placeComposer(welcome = empty)
+        if (empty && ::tvThreadTitle.isInitialized) {
+            tvThreadTitle.text = tx.newChat
+        }
     }
 
     private fun userBubble(text: String): View {
+        val displayBody = text.substringBefore("\n\n---Perhatian Agent:").trim()
         val wrap = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.END
         }
         val tv = TextView(activity).apply {
-            this.text = text.trim()
+            this.text = displayBody
             textSize = 15f
             setTextColor(cOnSurface)
             setLineSpacing(0f, 1.15f)
             setTextIsSelectable(true)
             setPadding(dp(14), dp(10), dp(14), dp(10))
-            background = rounded(cSurfaceHigh, 18f)
-            maxWidth = (activity.resources.displayMetrics.widthPixels * 0.82f).toInt()
+            background = rounded(cSurfaceHigh, 18f, cOutline)
+            maxWidth = (activity.resources.displayMetrics.widthPixels * 0.84f).toInt()
         }
         wrap.addView(tv, lp(-2, -2))
         return wrap
@@ -1059,15 +1645,15 @@ class AgentChatScreen(
         }
         head.addView(agentAvatar(22))
         head.addView(TextView(activity).apply {
-            text = "Agent"
+            text = "Sketchware Agent"
             textSize = 13f
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             setTextColor(cOnSurface)
         }, lp(-2, -2).apply { leftMargin = dp(8) })
         Regex("Step\\s*(\\d+)").find(entry.title)?.let { m ->
             head.addView(TextView(activity).apply {
-                text = "· langkah ${m.groupValues[1]}"
-                textSize = 12f
+                text = "· ${tx.stepsThinking} ${m.groupValues[1]}"
+                textSize = 11.5f
                 setTextColor(cOnSurfaceVar)
             }, lp(-2, -2).apply { leftMargin = dp(6) })
         }
@@ -1075,7 +1661,7 @@ class AgentChatScreen(
         col.addView(markdownView(entry.body), lp(-1, -2).apply { topMargin = dp(6) })
 
         val actions = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
-        actions.addView(smallAction(R.drawable.ic_mtrl_file, "Salin") { copy(entry.body, "Respons disalin") })
+        actions.addView(smallAction(R.drawable.ic_mtrl_file, tx.copy) { copy(entry.body, "Respons disalin") })
         col.addView(actions, lp(-2, -2).apply { topMargin = dp(2) })
         return col
     }
@@ -1108,6 +1694,7 @@ class AgentChatScreen(
     }
 
     private fun errorCard(entry: AgentChatEntry): View {
+        val ui = pro.sketchware.ai.config.AiStrings.current(activity)
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(12), dp(14), dp(12))
@@ -1132,7 +1719,7 @@ class AgentChatScreen(
             setTextIsSelectable(true)
         }, lp(-1, -2).apply { topMargin = dp(6) })
         val retry = TextView(activity).apply {
-            text = "Lanjutkan dari langkah terakhir"
+            text = ui.continueLastStepText
             textSize = 12.5f
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             setTextColor(cError)
@@ -1146,11 +1733,15 @@ class AgentChatScreen(
     }
 
     // ------------------------------------------------------------------------------------------
-    // Tool timeline
+    // DeerFlow Tool Step Visualizer (with Sub-Agent & Skill Badges)
     // ------------------------------------------------------------------------------------------
 
     private inner class ToolGroup {
-        val root = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        val root = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(cSurfaceLow, 14f, cOutline)
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+        }
         private val steps = mutableListOf<ToolStep>()
         private val headerText: TextView
         private val headerIcon: ImageView
@@ -1174,19 +1765,20 @@ class AgentChatScreen(
             header.addView(headerIcon)
             headerText = TextView(activity).apply {
                 textSize = 12.5f
+                setTypeface(Typeface.DEFAULT, Typeface.BOLD)
                 setTextColor(cOnSurfaceVar)
             }
-            header.addView(headerText, lp(-2, -2).apply { leftMargin = dp(8) })
+            header.addView(headerText, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) })
             chevron = tintedIcon(R.drawable.ic_mtrl_chevron_right_24, cOnSurfaceVar, 16).apply { rotation = 90f }
             header.addView(chevron, lp(dp(16), dp(16)).apply { leftMargin = dp(2) })
             root.addView(header)
 
             val bodyRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
             bodyRow.addView(View(activity).apply { setBackgroundColor(cOutline) },
-                LinearLayout.LayoutParams(dp(2), ViewGroup.LayoutParams.MATCH_PARENT).apply { leftMargin = dp(9) })
+                LinearLayout.LayoutParams(dp(2), ViewGroup.LayoutParams.MATCH_PARENT).apply { leftMargin = dp(7); topMargin = dp(4); bottomMargin = dp(4) })
             body = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(12), dp(2), 0, dp(2))
+                setPadding(dp(10), dp(2), 0, dp(2))
             }
             bodyRow.addView(body, LinearLayout.LayoutParams(0, -2, 1f))
             root.addView(bodyRow)
@@ -1237,23 +1829,38 @@ class AgentChatScreen(
             val row = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(4), dp(7), dp(4), dp(7))
+                setPadding(dp(4), dp(6), dp(4), dp(6))
                 background = ripple(null)
                 isClickable = true
                 setOnClickListener { toggle() }
             }
             row.addView(statusHolder, lp(dp(16), dp(16)))
+
+            val isSubagent = toolName == "delegate_subagent"
+            val isSkill = toolName == "use_skill"
+            if (isSubagent || isSkill) {
+                row.addView(TextView(activity).apply {
+                    text = if (isSubagent) "SUB-AGENT" else "SKILL"
+                    textSize = 9.5f
+                    typeface = Typeface.MONOSPACE
+                    setTypeface(typeface, Typeface.BOLD)
+                    setTextColor(if (isSubagent) cGold else cPrimary)
+                    setPadding(dp(6), dp(1), dp(6), dp(1))
+                    background = rounded(cSurfaceHigh, 6f, if (isSubagent) cGold else cOutline)
+                }, lp(-2, -2).apply { leftMargin = dp(8) })
+            }
+
             row.addView(TextView(activity).apply {
                 text = humanizeTool(toolName)
-                textSize = 13.5f
+                textSize = 13f
                 setTextColor(cOnSurface)
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
-            }, lp(-2, -2).apply { leftMargin = dp(10) })
+            }, lp(-2, -2).apply { leftMargin = dp(8) })
             val summary = argSummary(argsJson)
             row.addView(TextView(activity).apply {
                 text = summary
-                textSize = 12f
+                textSize = 11.5f
                 typeface = Typeface.MONOSPACE
                 setTextColor(cOnSurfaceVar)
                 maxLines = 1
@@ -1267,11 +1874,11 @@ class AgentChatScreen(
 
             details = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(26), 0, 0, dp(6))
+                setPadding(dp(24), 0, 0, dp(6))
                 visibility = View.GONE
             }
             if (argsJson.isNotBlank() && argsJson != "{}") {
-                details.addView(codeBlock(prettyJson(argsJson), "input"), lp(-1, -2).apply { bottomMargin = dp(6) })
+                details.addView(codeBlock(prettyJson(argsJson), tx.input), lp(-1, -2).apply { bottomMargin = dp(6) })
             }
             root.addView(details)
             setStatusRunning()
@@ -1301,32 +1908,37 @@ class AgentChatScreen(
             val color = if (error) cError else cSuccess
             statusHolder.addView(tintedIcon(icon, color, 16), FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER))
             if (output.isNotBlank()) {
-                details.addView(codeBlock(output.trim(), if (error) "error" else "output"), lp(-1, -2))
+                details.addView(codeBlock(output.trim(), if (error) "error" else tx.output), lp(-1, -2))
             }
         }
     }
 
     // ------------------------------------------------------------------------------------------
-    // State updates
+    // State Updates
     // ------------------------------------------------------------------------------------------
 
     private fun setRunning(running: Boolean, statusText: String, step: Int, maxSteps: Int) {
         isRunning = running
         thinkingRow.visibility = if (running) View.VISIBLE else View.GONE
         if (running) {
+            val ui = pro.sketchware.ai.config.AiStrings.current(activity)
             val m = Regex("^Langkah\\s+(\\d+)/(\\d+):\\s*").find(statusText)
             val clean = if (m != null) statusText.substring(m.range.last + 1) else statusText
-            tvThinking.text = clean.ifBlank { "Berpikir…" }
-            tvThinkingStep.text = when {
+            tvThinking.text = clean.ifBlank { ui.thinkingText }
+            val stepLabel = when {
                 m != null -> "${m.groupValues[1]}/${m.groupValues[2]}"
                 step > 0 && maxSteps > 0 -> "$step/$maxSteps"
                 else -> ""
             }
+            tvThinkingStep.text = stepLabel
+            tvThinkingStep.visibility = if (stepLabel.isEmpty()) View.GONE else View.VISIBLE
             if (pulse?.isStarted != true) pulse?.start()
+            dotAnimators.forEach { if (!it.isStarted) it.start() }
             ensureThinkingRowLast()
             scrollToBottomIfSticky()
         } else {
             pulse?.cancel()
+            dotAnimators.forEach { it.cancel() }
             tvThinking.alpha = 1f
         }
         updateSendButton()
@@ -1358,13 +1970,14 @@ class AgentChatScreen(
             planPanel.visibility = View.GONE
             return
         }
+        val ui = pro.sketchware.ai.config.AiStrings.current(activity)
         planPanel.visibility = View.VISIBLE
         val total = plan.tasks.size
         val done = plan.tasks.count { it.status == TaskStatus.COMPLETED }
         val current = plan.tasks.firstOrNull { it.status == TaskStatus.IN_PROGRESS }
             ?: plan.tasks.firstOrNull { it.status == TaskStatus.PENDING }
-        planHeaderTitle.text = if (total > 0) "Rencana · $done/$total selesai" else "Rencana"
-        planHeaderSub.text = current?.title ?: plan.goal.ifBlank { "Semua tugas selesai" }
+        planHeaderTitle.text = if (total > 0) "${tx.todos} · $done/$total" else tx.todos
+        planHeaderSub.text = current?.title ?: plan.goal.ifBlank { ui.allTasksCompleted }
         planProgress.setProgressCompat(if (total == 0) 0 else done * 100 / total, true)
 
         planList.removeAllViews()
@@ -1424,35 +2037,26 @@ class AgentChatScreen(
         val configured = config.isConfigured()
         val mcp = if (SketchwareMcpServer.isRunning()) " · MCP :${SketchwareMcpServer.boundPort}" else ""
         val provider = config.providerType.name.lowercase().replaceFirstChar { it.uppercase() }
-        val modeBadge = " · ${modeTitle(config.autonomyMode)}"
+        val modeBadge = " · ${modeTitle(config.autonomyMode)} (${DeerFlowTheme.modeTag(config.autonomyMode)})"
         tvSubtitle.text = if (configured) "$provider · ${config.getModelId()}$modeBadge$mcp" else "${ui.noApiKeyText}$modeBadge$mcp"
         statusDot.background = oval(if (configured) cSuccess else cWarning)
         tvModelPill.text = if (configured) config.getModelId() else ui.configureModelText
-        if (::tvLangPill.isInitialized) {
-            tvLangPill.text = config.agentLanguage.shortBadge
+        if (::configBanner.isInitialized) {
+            configBanner.visibility = if (configured) View.GONE else View.VISIBLE
         }
+        refreshModePill()
+        refreshWelcomeTexts()
+        refreshArtifactsBadge()
         if (::etPrompt.isInitialized) {
             etPrompt.hint = ui.composerHint
         }
         if (::tvDisclaimer.isInitialized) {
             tvDisclaimer.text = ui.disclaimerText
         }
-        if (::tvEmptyTitle.isInitialized) {
-            tvEmptyTitle.text = ui.emptyTitle
-        }
-        if (::tvEmptySub.isInitialized) {
-            tvEmptySub.text = "${ui.emptySubtitle}\n#$scId" + (activeScreenName?.let { " · $it" } ?: "")
-        }
-        if (suggestionTitleViews.size == 4) {
-            suggestionTitleViews[0].text = ui.suggestionBuildZeroTitle
-            suggestionTitleViews[1].text = ui.suggestionFixErrorTitle
-            suggestionTitleViews[2].text = ui.suggestionRedesignUiTitle
-            suggestionTitleViews[3].text = ui.suggestionExplainProjectTitle
-        }
     }
 
     // ------------------------------------------------------------------------------------------
-    // Actions
+    // Actions & Sheets
     // ------------------------------------------------------------------------------------------
 
     private fun submit(raw: String) {
@@ -1544,26 +2148,20 @@ class AgentChatScreen(
     private fun showOverflow(anchor: View) {
         val ui = pro.sketchware.ai.config.AiStrings.current(activity)
         PopupMenu(activity, anchor).apply {
-            menu.add(0, 1, 0, ui.menuSettings)
-            menu.add(0, 7, 1, "${ui.menuLanguage} (${config.agentLanguage.shortBadge})")
-            menu.add(0, 5, 2, ui.menuExtensions)
-            menu.add(0, 4, 3, ui.menuTerminal)
-            menu.add(0, 6, 4, ui.menuCheckpoints)
-            menu.add(0, 2, 5, ui.menuCopyTranscript)
-            menu.add(0, 3, 6, ui.newChatStartBtn)
+            menu.add(0, 8, 0, "📦 ${tx.artifacts}")
+            menu.add(0, 1, 1, ui.menuSettings)
+            menu.add(0, 7, 2, "${ui.menuLanguage} (${config.agentLanguage.shortBadge})")
+            menu.add(0, 5, 3, ui.menuExtensions)
+            menu.add(0, 4, 4, ui.menuTerminal)
+            menu.add(0, 6, 5, ui.menuCheckpoints)
+            menu.add(0, 2, 6, ui.menuCopyTranscript)
+            menu.add(0, 3, 7, ui.newChatStartBtn)
             setOnMenuItemClickListener {
                 when (it.itemId) {
+                    8 -> showArtifactsSheet()
                     1 -> AiSettingsDialog.show(activity) { refreshHeader() }
-                    7 -> pro.sketchware.ai.config.AiStrings.showLanguagePickerDialog(activity) { refreshHeader() }
-                    5 -> ExtensionsHubDialog.show(
-                        context = activity,
-                        initialTab = 0,
-                        onUsePrompt = { promptText ->
-                            prefill(promptText)
-                            focusComposer()
-                        },
-                        onChanged = { refreshHeader() }
-                    )
+                    7 -> pro.sketchware.ai.config.AiStrings.showLanguagePickerDialog(activity) { rebuildSidebar(); refreshHeader() }
+                    5 -> openExtensions(0)
                     4 -> TerminalScreen.show(activity, scId)
                     6 -> showCheckpointsDialog()
                     2 -> copy(exportTranscript(), ui.copiedToast)
@@ -1604,13 +2202,13 @@ class AgentChatScreen(
     }
 
     /**
-     * Unified Antigravity-style "Add Context" Bottom Sheet (`+` button on bottom-left):
+     * Unified "Add Context" Bottom Sheet (`+` button on bottom-left):
      * 1. Tambahkan File (Add File)
      * 2. Tambahkan Folder (Add Folder)
      * 3. Support File APK (Add / Inspect APK File)
      * 4. Tambahkan Gambar (Add Image / Screenshot)
      * 5. Prompt Cepat (Quick Prompts / Slash Commands)
-     * 6. Mode Agent (Ask, Copilot, Agent, Autopilot 0→APK, Tutor)
+     * 6. Mode Agent (Ask, Copilot · Flash, Agent · Pro, Autopilot · Ultra, Tutor)
      */
     private fun showAddContextSheet() {
         val isId = config.agentLanguage.resolved() == pro.sketchware.ai.config.AgentLanguage.ID
@@ -1618,11 +2216,11 @@ class AgentChatScreen(
         val scroll = NestedScrollView(activity)
         val col = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
+            setBackgroundColor(cPopover)
             setPadding(dp(12), dp(16), dp(12), dp(24))
         }
         scroll.addView(col, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
-        // Header
         val headerRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -1648,7 +2246,7 @@ class AgentChatScreen(
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(14), dp(12), dp(14), dp(12))
-                background = ripple(rounded(cSurfaceLow, 14f, cOutline))
+                background = ripple(rounded(cSurfaceCont, 14f, cOutline))
                 isClickable = true
                 setOnClickListener {
                     sheet.dismiss()
@@ -1690,7 +2288,6 @@ class AgentChatScreen(
             col.addView(row, lp(-1, -2).apply { bottomMargin = dp(8) })
         }
 
-        // 1. Tambahkan File
         addMenuCard(
             iconRes = R.drawable.ic_mtrl_file,
             title = if (isId) "Tambahkan File" else "Add File",
@@ -1708,7 +2305,6 @@ class AgentChatScreen(
             )
         }
 
-        // 2. Tambahkan Folder
         addMenuCard(
             iconRes = R.drawable.ic_mtrl_folder,
             title = if (isId) "Tambahkan Folder" else "Add Folder",
@@ -1726,7 +2322,6 @@ class AgentChatScreen(
             )
         }
 
-        // 3. Support File APK
         addMenuCard(
             iconRes = R.drawable.ic_mtrl_apk_document,
             title = if (isId) "Tambahkan File APK" else "Add APK File",
@@ -1745,7 +2340,6 @@ class AgentChatScreen(
             )
         }
 
-        // 4. Tambahkan Gambar
         addMenuCard(
             iconRes = R.drawable.ic_mtrl_image,
             title = if (isId) "Tambahkan Gambar" else "Add Image",
@@ -1763,14 +2357,13 @@ class AgentChatScreen(
             )
         }
 
-        // 5. Prompt Cepat (Slash Commands)
         addMenuCard(
             iconRes = R.drawable.ic_mtrl_code,
             title = if (isId) "Prompt Cepat (Slash Commands)" else "Quick Prompts (Slash Commands)",
             subtitle = if (isId) {
-                "Pilih template perintah cepat (/bangun-apk, /cek-error, /percantik-ui, /fix-library, Skill & Plugin)"
+                "Pilih template perintah cepat (/bangun-apk, /cek-error, /subagent-audit, Skill & Plugin)"
             } else {
-                "Pick ready-to-use slash commands (/bangun-apk, /cek-error, /percantik-ui, /fix-library, Skills & Plugins)"
+                "Pick ready-to-use slash commands (/bangun-apk, /cek-error, /subagent-audit, Skills & Plugins)"
             },
             badgeText = "/ Prompt"
         ) {
@@ -1778,12 +2371,11 @@ class AgentChatScreen(
             focusComposer()
         }
 
-        // 6. Mode Agent (Unified inside Add Context)
         addMenuCard(
             iconRes = R.drawable.ic_mtrl_tune,
             title = if (isId) "Mode Agent" else "Agent Mode",
             subtitle = pro.sketchware.ai.config.AiStrings.modeSubtitle(config.autonomyMode, config.agentLanguage),
-            badgeText = modeTitle(config.autonomyMode)
+            badgeText = "${modeTitle(config.autonomyMode)} · ${DeerFlowTheme.modeTag(config.autonomyMode)}"
         ) {
             showModePicker()
         }
@@ -1796,44 +2388,61 @@ class AgentChatScreen(
         val sheet = BottomSheetDialog(activity)
         val col = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(8), dp(16), dp(8), dp(24))
+            setBackgroundColor(cPopover)
+            setPadding(dp(10), dp(16), dp(10), dp(24))
         }
         col.addView(TextView(activity).apply {
-            text = "Mode agent"
-            textSize = 16f
+            text = tx.agentModes
+            textSize = 16.5f
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             setTextColor(cOnSurface)
-            setPadding(dp(16), 0, dp(16), dp(8))
+            setPadding(dp(14), 0, dp(14), dp(8))
         })
         for (mode in AgentAutonomyMode.entries) {
             val selected = config.autonomyMode == mode
+            val ultra = mode == AgentAutonomyMode.AUTOPILOT
             val row = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(16), dp(12), dp(16), dp(12))
-                background = ripple(if (selected) rounded(cSurfaceHigh, 12f) else null)
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                background = ripple(if (selected) rounded(cSurfaceHigh, 12f, if (ultra) cGold else cOutline) else null)
                 isClickable = true
                 setOnClickListener {
                     config.autonomyMode = mode
+                    rebuildSidebar()
                     refreshHeader()
                     sheet.dismiss()
                 }
             }
+            row.addView(tintedIcon(modeIcon(mode), if (ultra) cGold else cOnSurface, 20), lp(dp(20), dp(20)).apply { rightMargin = dp(12) })
             val texts = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-            texts.addView(TextView(activity).apply {
+            val topLine = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            topLine.addView(TextView(activity).apply {
                 text = modeTitle(mode)
                 textSize = 14.5f
-                setTextColor(cOnSurface)
-                if (selected) setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+                setTextColor(if (ultra) cGold else cOnSurface)
+                if (selected || ultra) setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             })
+            topLine.addView(TextView(activity).apply {
+                text = DeerFlowTheme.modeTag(mode)
+                textSize = 10.5f
+                typeface = Typeface.MONOSPACE
+                setTextColor(if (ultra) cGold else cOnSurfaceVar)
+                setPadding(dp(6), dp(1), dp(6), dp(1))
+                background = rounded(cSurfaceLow, 6f, if (ultra) cGold else cOutline)
+            }, lp(-2, -2).apply { leftMargin = dp(8) })
+            texts.addView(topLine)
             texts.addView(TextView(activity).apply {
                 text = pro.sketchware.ai.config.AiStrings.modeSubtitle(mode, config.agentLanguage)
                 textSize = 12f
                 setTextColor(cOnSurfaceVar)
-            })
+            }, lp(-1, -2).apply { topMargin = dp(2) })
             row.addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
-            if (selected) row.addView(tintedIcon(R.drawable.ic_mtrl_check, cPrimary, 20))
-            col.addView(row, lp(-1, -2))
+            if (selected) row.addView(tintedIcon(R.drawable.ic_mtrl_check, if (ultra) cGold else cPrimary, 20))
+            col.addView(row, lp(-1, -2).apply { bottomMargin = dp(4) })
         }
         sheet.setContentView(col)
         sheet.show()
@@ -1957,7 +2566,7 @@ class AgentChatScreen(
             typeface = Typeface.MONOSPACE
             setTextColor(if (label == "error") cError else cOnSurfaceVar)
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        head.addView(smallAction(R.drawable.ic_mtrl_file, "Salin") { copy(code, "Disalin") })
+        head.addView(smallAction(R.drawable.ic_mtrl_file, tx.copy) { copy(code, "Disalin") })
         box.addView(head)
         box.addView(View(activity).apply { setBackgroundColor(cOutline) }, lp(-1, 1))
         val hs = HorizontalScrollView(activity).apply { isHorizontalScrollBarEnabled = false }
@@ -2016,7 +2625,7 @@ class AgentChatScreen(
         "manage_checkpoints" to "Mengelola checkpoint proyek",
         "preview_generated_source" to "Melihat source hasil generate",
         "inspect_runtime_logs" to "Memeriksa log runtime",
-        "update_long_horizon_plan" to "Memperbarui rencana",
+        "update_long_horizon_plan" to "Memperbarui To-dos",
         "save_and_verify_compile" to "Menyimpan & compile",
         "run_shell" to "Menjalankan terminal shell",
         "manage_linux_env" to "Mengelola sistem Linux Debian",
@@ -2025,7 +2634,9 @@ class AgentChatScreen(
         "use_skill" to "Memuat Skill",
         "manage_plugins" to "Mengelola Plugin",
         "manage_mcp_connectors" to "Mengelola konektor MCP",
-        "call_mcp_tool" to "Memanggil tool MCP"
+        "call_mcp_tool" to "Memanggil tool MCP",
+        "manage_artifacts" to "Mengelola Workspace Artifacts",
+        "delegate_subagent" to "Delegasi Sub-Agent"
     )
 
     private fun humanizeTool(name: String) = toolLabels[name]
@@ -2035,8 +2646,8 @@ class AgentChatScreen(
         if (json.isBlank()) return ""
         return try {
             val obj: JsonObject = JsonParser.parseString(json).asJsonObject
-            val keys = listOf("file_name", "screen_name", "path", "target_id", "event_name", "name",
-                "action", "library_names", "permissions", "goal", "query")
+            val keys = listOf("role", "skill_id", "file_name", "screen_name", "path", "target_id", "event_name", "name",
+                "action", "library_names", "permissions", "goal", "task", "query")
             val parts = mutableListOf<String>()
             for (k in keys) {
                 val v = obj.get(k) ?: continue
@@ -2126,24 +2737,6 @@ class AgentChatScreen(
             setOnClickListener { onClick() }
         }
 
-    private fun pill(iconRes: Int, onClick: () -> Unit): TextView = TextView(activity).apply {
-        textSize = 12.5f
-        setTextColor(cOnSurfaceVar)
-        maxLines = 1
-        ellipsize = TextUtils.TruncateAt.END
-        maxWidth = dp(170)
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(10), dp(6), dp(12), dp(6))
-        compoundDrawablePadding = dp(6)
-        val d = activity.getDrawable(iconRes)?.mutate()
-        d?.setTint(cOnSurfaceVar)
-        d?.setBounds(0, 0, dp(15), dp(15))
-        setCompoundDrawables(d, null, null, null)
-        background = ripple(rounded(Color.TRANSPARENT, 16f, cOutline))
-        isClickable = true
-        setOnClickListener { onClick() }
-    }
-
     private fun smallAction(iconRes: Int, label: String, onClick: () -> Unit): View = TextView(activity).apply {
         text = label
         textSize = 11.5f
@@ -2163,8 +2756,8 @@ class AgentChatScreen(
     private fun agentAvatar(sizeDp: Int): View = FrameLayout(activity).apply {
         background = oval(cPrimary)
         addView(TextView(activity).apply {
-            text = "✦"
-            textSize = sizeDp * 0.42f
+            text = "🦌"
+            textSize = sizeDp * 0.44f
             setTextColor(cOnPrimary)
             gravity = Gravity.CENTER
             includeFontPadding = false
