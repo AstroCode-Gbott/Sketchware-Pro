@@ -124,14 +124,16 @@ class AgentChatScreen(
     private lateinit var etPrompt: EditText
     private lateinit var btnSend: FrameLayout
     private lateinit var ivSend: ImageView
-    private lateinit var tvSlashPill: TextView
-    private lateinit var tvModePill: TextView
+    private lateinit var btnAddContext: View
+    private lateinit var attachmentsScroll: HorizontalScrollView
+    private lateinit var attachmentsRow: LinearLayout
     private lateinit var tvModelPill: TextView
     private lateinit var tvLangPill: TextView
     private lateinit var tvDisclaimer: TextView
     private lateinit var tvEmptyTitle: TextView
     private lateinit var tvEmptySub: TextView
     private val suggestionTitleViews = mutableListOf<TextView>()
+    private val attachedContexts = mutableListOf<AttachedContextItem>()
     // endregion
 
     // region State
@@ -754,8 +756,22 @@ class AgentChatScreen(
         val box = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             background = rounded(cSurfaceCont, 24f, cOutline)
-            setPadding(dp(14), dp(6), dp(8), dp(8))
+            setPadding(dp(12), dp(6), dp(8), dp(8))
         }
+
+        // Attached Context Chips Row (File / Folder / APK / Image)
+        attachmentsRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(2), dp(4), dp(2), dp(2))
+        }
+        attachmentsScroll = HorizontalScrollView(activity).apply {
+            isHorizontalScrollBarEnabled = false
+            visibility = View.GONE
+            addView(attachmentsRow)
+        }
+        box.addView(attachmentsScroll, lp(-1, -2))
+
         etPrompt = EditText(activity).apply {
             background = null
             hint = pro.sketchware.ai.config.AiStrings.current(activity).composerHint
@@ -765,7 +781,7 @@ class AgentChatScreen(
             minLines = 1
             maxLines = 6
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            setPadding(0, dp(10), 0, dp(6))
+            setPadding(dp(2), dp(10), dp(2), dp(6))
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -781,26 +797,18 @@ class AgentChatScreen(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        tvSlashPill = pill(R.drawable.ic_mtrl_code) {
-            if (slashPanel.visibility == View.VISIBLE) {
-                if (etPrompt.text?.toString()?.trim() == "/") {
-                    etPrompt.setText("")
-                } else {
-                    hideSlashPanel()
-                }
-            } else {
-                if (etPrompt.text.isNullOrBlank()) {
-                    etPrompt.setText("/")
-                    etPrompt.setSelection(1)
-                    focusComposer()
-                } else {
-                    updateSlashSuggestions("", forceShowAll = true)
-                }
-            }
-        }.apply {
-            text = "/ Prompt"
+
+        // Bottom-Left "+" (Add Context) Icon Button — unifies File, Folder, APK, Image, Quick Prompt, and Agent Mode
+        btnAddContext = FrameLayout(activity).apply {
+            isClickable = true
+            contentDescription = "Add Context"
+            ViewCompat.setTooltipText(this, "Add Context")
+            background = ripple(oval(cSurfaceHigh))
+            addView(tintedIcon(R.drawable.ic_mtrl_add, cPrimary, 20), FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
+            setOnClickListener { showAddContextSheet() }
         }
-        tvModePill = pill(R.drawable.ic_mtrl_tune) { showModePicker() }
+        actions.addView(btnAddContext, lp(dp(36), dp(36)).apply { rightMargin = dp(8) })
+
         tvModelPill = pill(R.drawable.ic_mtrl_bulb) {
             AiSettingsDialog.show(activity) { refreshHeader() }
         }
@@ -817,7 +825,7 @@ class AgentChatScreen(
         }.apply {
             text = "MCP · Plugin · Skill"
         }
-        tvLangPill = pill(R.drawable.ic_mtrl_settings) {
+        tvLangPill = pill(R.drawable.ic_mtrl_web) {
             pro.sketchware.ai.config.AiStrings.showLanguagePickerDialog(activity) {
                 refreshHeader()
             }
@@ -825,9 +833,7 @@ class AgentChatScreen(
             text = config.agentLanguage.shortBadge
         }
         val pills = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
-        pills.addView(tvSlashPill)
-        pills.addView(tvModePill, lp(-2, -2).apply { leftMargin = dp(6) })
-        pills.addView(tvModelPill, lp(-2, -2).apply { leftMargin = dp(6) })
+        pills.addView(tvModelPill)
         pills.addView(tvLangPill, lp(-2, -2).apply { leftMargin = dp(6) })
         pills.addView(tvExtensionsPill, lp(-2, -2).apply { leftMargin = dp(6) })
         val pillScroll = HorizontalScrollView(activity).apply {
@@ -849,6 +855,53 @@ class AgentChatScreen(
         box.addView(actions, lp(-1, -2))
         updateSendButton()
         return box
+    }
+
+    private fun addContextAttachment(item: AttachedContextItem) {
+        attachedContexts.removeAll { it.absolutePath == item.absolutePath }
+        attachedContexts.add(item)
+        renderAttachedContextChips()
+        updateSendButton()
+        refreshHeader()
+    }
+
+    private fun renderAttachedContextChips() {
+        if (!::attachmentsRow.isInitialized) return
+        attachmentsRow.removeAllViews()
+        if (attachedContexts.isEmpty()) {
+            attachmentsScroll.visibility = View.GONE
+            return
+        }
+        attachmentsScroll.visibility = View.VISIBLE
+        for (item in attachedContexts) {
+            val chip = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = rounded(cSurfaceHigh, 14f, cPrimary)
+                setPadding(dp(10), dp(5), dp(8), dp(5))
+            }
+            chip.addView(tintedIcon(item.iconRes(), cPrimary, 15))
+            chip.addView(TextView(activity).apply {
+                text = "${item.displayName} (${item.badge})"
+                textSize = 11.5f
+                setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+                setTextColor(cOnSurface)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.MIDDLE
+                maxWidth = dp(200)
+            }, lp(-2, -2).apply { leftMargin = dp(6); rightMargin = dp(6) })
+            val btnRemove = tintedIcon(R.drawable.ic_mtrl_close, cOnSurfaceVar, 15).apply {
+                isClickable = true
+                setOnClickListener {
+                    attachedContexts.remove(item)
+                    renderAttachedContextChips()
+                    updateSendButton()
+                    refreshHeader()
+                }
+            }
+            chip.addView(btnRemove)
+            attachmentsRow.addView(chip, lp(-2, -2).apply { rightMargin = dp(6) })
+        }
     }
 
     // ------------------------------------------------------------------------------------------
@@ -1282,7 +1335,7 @@ class AgentChatScreen(
 
     private fun updateSendButton() {
         if (!::btnSend.isInitialized) return
-        val hasText = !etPrompt.text.isNullOrBlank()
+        val hasInput = !etPrompt.text.isNullOrBlank() || attachedContexts.isNotEmpty()
         if (isRunning) {
             ivSend.setImageResource(R.drawable.ic_mtrl_stop)
             ivSend.imageTintList = ColorStateList.valueOf(cSurface)
@@ -1292,11 +1345,11 @@ class AgentChatScreen(
             btnSend.alpha = 1f
         } else {
             ivSend.setImageResource(R.drawable.ic_mtrl_arrow_up)
-            ivSend.imageTintList = ColorStateList.valueOf(if (hasText) cOnPrimary else cOnSurfaceVar)
-            btnSend.background = ripple(oval(if (hasText) cPrimary else cSurfaceHigh))
+            ivSend.imageTintList = ColorStateList.valueOf(if (hasInput) cOnPrimary else cOnSurfaceVar)
+            btnSend.background = ripple(oval(if (hasInput) cPrimary else cSurfaceHigh))
             btnSend.contentDescription = "Kirim"
-            btnSend.isEnabled = hasText
-            btnSend.alpha = if (hasText) 1f else 0.7f
+            btnSend.isEnabled = hasInput
+            btnSend.alpha = if (hasInput) 1f else 0.7f
         }
     }
 
@@ -1371,10 +1424,10 @@ class AgentChatScreen(
         val configured = config.isConfigured()
         val mcp = if (SketchwareMcpServer.isRunning()) " · MCP :${SketchwareMcpServer.boundPort}" else ""
         val provider = config.providerType.name.lowercase().replaceFirstChar { it.uppercase() }
-        tvSubtitle.text = if (configured) "$provider · ${config.getModelId()}$mcp" else "${ui.noApiKeyText}$mcp"
+        val modeBadge = " · ${modeTitle(config.autonomyMode)}"
+        tvSubtitle.text = if (configured) "$provider · ${config.getModelId()}$modeBadge$mcp" else "${ui.noApiKeyText}$modeBadge$mcp"
         statusDot.background = oval(if (configured) cSuccess else cWarning)
         tvModelPill.text = if (configured) config.getModelId() else ui.configureModelText
-        tvModePill.text = modeTitle(config.autonomyMode)
         if (::tvLangPill.isInitialized) {
             tvLangPill.text = config.agentLanguage.shortBadge
         }
@@ -1404,12 +1457,12 @@ class AgentChatScreen(
 
     private fun submit(raw: String) {
         val rawTrimmed = raw.trim()
-        if (rawTrimmed.isEmpty()) return
+        if (rawTrimmed.isEmpty() && attachedContexts.isEmpty()) return
         val matchedSlash = slashCommands().firstOrNull {
             it.command.equals(rawTrimmed, ignoreCase = true)
         }
-        val text = matchedSlash?.prompt ?: rawTrimmed
-        if (text == "/") {
+        val baseText = matchedSlash?.prompt ?: rawTrimmed
+        if (baseText == "/" && attachedContexts.isEmpty()) {
             updateSlashSuggestions("/", forceShowAll = true)
             return
         }
@@ -1419,6 +1472,36 @@ class AgentChatScreen(
         }
         hideSlashPanel()
         etPrompt.setText("")
+
+        val isId = config.agentLanguage.resolved() == pro.sketchware.ai.config.AgentLanguage.ID
+        val effectiveUserPrompt = if (baseText.isEmpty() && attachedContexts.isNotEmpty()) {
+            if (isId) {
+                "Analisis konteks/file yang saya lampirkan berikut dan bantu terapkan sesuai kebutuhan proyek ini."
+            } else {
+                "Analyze the attached context/files below and help integrate or apply them in this project."
+            }
+        } else {
+            baseText
+        }
+
+        val text = if (attachedContexts.isEmpty()) {
+            effectiveUserPrompt
+        } else {
+            buildString {
+                appendLine(effectiveUserPrompt)
+                appendLine()
+                appendLine("---Perhatian Agent: Pengguna Melampirkan Konteks Berikut (Add Context)---")
+                for (att in attachedContexts) {
+                    appendLine(att.promptBlock.trim())
+                    appendLine()
+                }
+            }.trim()
+        }
+
+        attachedContexts.clear()
+        renderAttachedContextChips()
+        refreshHeader()
+        updateSendButton()
         stickToBottom = true
         if (!config.isConfigured()) {
             val userEntry = AgentChatEntry(UUID.randomUUID().toString(), ChatEntryType.USER, "Anda (MCP Bridge Queue)", text)
@@ -1518,6 +1601,195 @@ class AgentChatScreen(
             }
             .setNegativeButton("Tutup", null)
             .show()
+    }
+
+    /**
+     * Unified Antigravity-style "Add Context" Bottom Sheet (`+` button on bottom-left):
+     * 1. Tambahkan File (Add File)
+     * 2. Tambahkan Folder (Add Folder)
+     * 3. Support File APK (Add / Inspect APK File)
+     * 4. Tambahkan Gambar (Add Image / Screenshot)
+     * 5. Prompt Cepat (Quick Prompts / Slash Commands)
+     * 6. Mode Agent (Ask, Copilot, Agent, Autopilot 0→APK, Tutor)
+     */
+    private fun showAddContextSheet() {
+        val isId = config.agentLanguage.resolved() == pro.sketchware.ai.config.AgentLanguage.ID
+        val sheet = BottomSheetDialog(activity)
+        val scroll = NestedScrollView(activity)
+        val col = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(16), dp(12), dp(24))
+        }
+        scroll.addView(col, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        // Header
+        val headerRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), 0, dp(8), dp(10))
+        }
+        headerRow.addView(tintedIcon(R.drawable.ic_mtrl_add_circle, cPrimary, 22))
+        headerRow.addView(TextView(activity).apply {
+            text = "Add Context"
+            textSize = 17f
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(cOnSurface)
+        }, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(10) })
+        col.addView(headerRow)
+
+        fun addMenuCard(
+            iconRes: Int,
+            title: String,
+            subtitle: String,
+            badgeText: String? = null,
+            onClick: () -> Unit
+        ) {
+            val row = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                background = ripple(rounded(cSurfaceLow, 14f, cOutline))
+                isClickable = true
+                setOnClickListener {
+                    sheet.dismiss()
+                    onClick()
+                }
+            }
+            row.addView(tintedIcon(iconRes, cPrimary, 22))
+            val textCol = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+            val topLine = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            topLine.addView(TextView(activity).apply {
+                text = title
+                textSize = 14.5f
+                setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+                setTextColor(cOnSurface)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            if (!badgeText.isNullOrBlank()) {
+                topLine.addView(TextView(activity).apply {
+                    text = badgeText
+                    textSize = 11f
+                    setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+                    setTextColor(cPrimary)
+                    setPadding(dp(8), dp(2), dp(8), dp(2))
+                    background = rounded(cSurfaceHigh, 8f)
+                }, lp(-2, -2).apply { leftMargin = dp(6) })
+            }
+            textCol.addView(topLine)
+            textCol.addView(TextView(activity).apply {
+                text = subtitle
+                textSize = 12f
+                setTextColor(cOnSurfaceVar)
+            }, lp(-1, -2).apply { topMargin = dp(2) })
+            row.addView(textCol, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(12) })
+            row.addView(tintedIcon(R.drawable.ic_mtrl_chevron_right_24, cOnSurfaceVar, 18))
+            col.addView(row, lp(-1, -2).apply { bottomMargin = dp(8) })
+        }
+
+        // 1. Tambahkan File
+        addMenuCard(
+            iconRes = R.drawable.ic_mtrl_file,
+            title = if (isId) "Tambahkan File" else "Add File",
+            subtitle = if (isId) {
+                "Lampirkan file kode (.java, .kt, .xml, .json), library (.jar, .dex, .aar), atau dokumen ke AI Agent"
+            } else {
+                "Attach code files (.java, .kt, .xml, .json), libraries (.jar, .dex, .aar), or documents to AI Agent"
+            }
+        ) {
+            ContextAttachmentPicker.showFileOrFolderPicker(
+                context = activity,
+                scId = scId,
+                mode = ContextAttachmentPicker.PickerMode.ANY_FILE,
+                onAttached = { addContextAttachment(it) }
+            )
+        }
+
+        // 2. Tambahkan Folder
+        addMenuCard(
+            iconRes = R.drawable.ic_mtrl_folder,
+            title = if (isId) "Tambahkan Folder" else "Add Folder",
+            subtitle = if (isId) {
+                "Berikan struktur & akses satu folder penuh dari penyimpanan perangkat ke AI Agent"
+            } else {
+                "Provide full folder tree & access from device storage to AI Agent"
+            }
+        ) {
+            ContextAttachmentPicker.showFileOrFolderPicker(
+                context = activity,
+                scId = scId,
+                mode = ContextAttachmentPicker.PickerMode.FOLDER,
+                onAttached = { addContextAttachment(it) }
+            )
+        }
+
+        // 3. Support File APK
+        addMenuCard(
+            iconRes = R.drawable.ic_mtrl_apk_document,
+            title = if (isId) "Tambahkan File APK" else "Add APK File",
+            subtitle = if (isId) {
+                "Inspeksi struktur APK (DEX, Manifest, Layout, Drawable, Assets) atau ekstrak ke proyek ini"
+            } else {
+                "Inspect APK structure (DEX, Manifest, Layouts, Drawables, Assets) or extract into project"
+            },
+            badgeText = "APK"
+        ) {
+            ContextAttachmentPicker.showFileOrFolderPicker(
+                context = activity,
+                scId = scId,
+                mode = ContextAttachmentPicker.PickerMode.APK_ONLY,
+                onAttached = { addContextAttachment(it) }
+            )
+        }
+
+        // 4. Tambahkan Gambar
+        addMenuCard(
+            iconRes = R.drawable.ic_mtrl_image,
+            title = if (isId) "Tambahkan Gambar" else "Add Image",
+            subtitle = if (isId) {
+                "Lampirkan gambar / screenshot referensi desain UI atau impor langsung ke @drawable proyek"
+            } else {
+                "Attach UI reference image / screenshot or import directly into project @drawable"
+            }
+        ) {
+            ContextAttachmentPicker.showFileOrFolderPicker(
+                context = activity,
+                scId = scId,
+                mode = ContextAttachmentPicker.PickerMode.IMAGE_ONLY,
+                onAttached = { addContextAttachment(it) }
+            )
+        }
+
+        // 5. Prompt Cepat (Slash Commands)
+        addMenuCard(
+            iconRes = R.drawable.ic_mtrl_code,
+            title = if (isId) "Prompt Cepat (Slash Commands)" else "Quick Prompts (Slash Commands)",
+            subtitle = if (isId) {
+                "Pilih template perintah cepat (/bangun-apk, /cek-error, /percantik-ui, /fix-library, Skill & Plugin)"
+            } else {
+                "Pick ready-to-use slash commands (/bangun-apk, /cek-error, /percantik-ui, /fix-library, Skills & Plugins)"
+            },
+            badgeText = "/ Prompt"
+        ) {
+            updateSlashSuggestions("", forceShowAll = true)
+            focusComposer()
+        }
+
+        // 6. Mode Agent (Unified inside Add Context)
+        addMenuCard(
+            iconRes = R.drawable.ic_mtrl_tune,
+            title = if (isId) "Mode Agent" else "Agent Mode",
+            subtitle = pro.sketchware.ai.config.AiStrings.modeSubtitle(config.autonomyMode, config.agentLanguage),
+            badgeText = modeTitle(config.autonomyMode)
+        ) {
+            showModePicker()
+        }
+
+        sheet.setContentView(scroll)
+        sheet.show()
     }
 
     private fun showModePicker() {

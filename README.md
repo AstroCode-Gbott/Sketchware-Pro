@@ -86,6 +86,14 @@ Mendukung pengguna dari seluruh negara dengan pengaturan bahasa instan (tersedia
 - **🌐 Auto (System Default)** — Otomatis mengikuti bahasa bawaan perangkat Android atau bahasa pesan pengguna.
 - **🇺🇸 English** · **🇮🇩 Bahasa Indonesia** · **🇪🇸 Español** · **🇧🇷 Português** · **🇸🇦 العربية** · **🇮🇳 हिन्दी** · **🇷🇺 Русский** · **🇨🇳 中文 (简体)** · **🇯🇵 日本語** · **🇰🇷 한국어** · **🇫🇷 Français** · **🇩🇪 Deutsch** · **🇹🇷 Türkçe** · **🇻🇳 Tiếng Việt** · **🇹🇭 ไทย** · **🇲🇾 Bahasa Melayu**
 
+### 7. ➕ Tombol `+` ("Add Context") Terpadu Gaya Antigravity
+Tombol **`+` (Add Context)** di pojok kiri bawah *composer bar* menyatukan seluruh konteks file dan kontrol agen dalam satu *Bottom Sheet* modern:
+- **📄 Tambahkan File**: Melampirkan file kode/teks/konfigurasi dari perangkat atau direktori proyek (`@project`, `@mysc`, `@libs`, `/sdcard`, `Download`) langsung ke konteks AI Agent.
+- **📁 Tambahkan Folder**: Melampirkan struktur pohon direktori beserta cuplikan isi file penting di dalamnya.
+- **📦 Tambahkan File APK (Support File APK)**: Melakukan inspeksi struktur internal `.apk` secara otomatis (`AndroidManifest.xml`, jumlah `classes.dex`, daftar layout, drawable, asset, & native libraries `.so`) agar agen dapat menganalisis atau memodifikasi APK.
+- **🖼️ Tambahkan Gambar**: Melampirkan *screenshot*/mockup UI atau aset gambar beserta resolusi dimensinya, dilengkapi opsi **Impor otomatis ke `@drawable` proyek**.
+- **⚡ Prompt Cepat (`/`) & 🤖 Mode Agent**: Akses cepat ke template perintah *slash* dan pemilihan 5 mode otonomi agen dalam satu menu terpadu.
+
 ---
 
 ## 🏗️ Arsitektur Kode Sumber
