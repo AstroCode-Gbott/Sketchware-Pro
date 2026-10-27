@@ -16,7 +16,12 @@ dependencyresolver = "05ec26af0b"
 #noinspection NewerVersionAvailable
 ecj = "3.26.0"
 exifinterface = "1.4.2"
-filepicker = "3e930dc088"
+# Pinned to 74526bea66: newer commits (e.g. 3e930dc088) broke folder navigation
+# and checkbox selection in FilePickerDialogFragment - the root click listener
+# that opens directories is overwritten by the selection listener, making it
+# impossible to browse into subfolders (e.g. .sketchware/backups/) to pick
+# backup files for restore. Re-pin only after upstream fixes this regression.
+filepicker = "74526bea66"
 flexbox = "3.0.0"
 glide = "5.0.9"
 gson = "2.14.0"
