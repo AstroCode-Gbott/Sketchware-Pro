@@ -473,11 +473,6 @@ class AgentChatScreen(
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             setTextColor(cOnSurface)
         })
-        brandCol.addView(TextView(activity).apply {
-            text = "DeerFlow 2.0 Workspace"
-            textSize = 11f
-            setTextColor(cOnSurfaceVar)
-        })
         brand.addView(brandCol, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(10) })
         brand.addView(iconButton(R.drawable.ic_mtrl_sidebar, "Close sidebar") { closeSidebar() })
         panel.addView(brand)
