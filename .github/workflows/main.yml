@@ -1,0 +1,80 @@
+name: Build Sketchware Pro AI Agent APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Compile & Release APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle Cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant Execute Permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Run Unit Tests & Assemble APK
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Prepare Release Artifacts
+        id: prep
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          cp app/build/outputs/apk/debug/app-debug.apk Sketchware_Pro_AI_Agent.apk
+          cp app/build/outputs/apk/debug/app-debug.apk "Sketchware_Pro_AI_Agent-${SHORT_SHA}.apk"
+
+      - name: Upload APK to GitHub Actions Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sketchware_Pro_AI_Agent_APK
+          path: |
+            Sketchware_Pro_AI_Agent.apk
+            Sketchware_Pro_AI_Agent-${{ steps.prep.outputs.short_sha }}.apk
+          if-no-files-found: error
+
+      - name: Publish / Update GitHub Release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v7.0.0-ai-agent
+          name: "Sketchware Pro AI Agent Studio (Auto-Build #${{ github.run_number }})"
+          body: |
+            ## 🚀 Sketchware Pro — AI Agent Studio Edition
+            Build otomatis dari commit `${{ github.sha }}` (`${{ steps.prep.outputs.short_sha }}`).
+
+            ### 📥 Unduh Langsung (Direct Download)
+            - **[Sketchware_Pro_AI_Agent.apk](https://github.com/${{ github.repository }}/releases/download/v7.0.0-ai-agent/Sketchware_Pro_AI_Agent.apk)** *(Selalu versi terbaru)*
+
+            ### ✨ Fitur Utama
+            - **Autonomous AI Agent Harness**: Mode `Ask`, `Copilot`, `Agent`, `Autopilot 0→APK`, dan `Tutor`.
+            - **Multi-Provider LLM**: Google Gemini, OpenAI, Anthropic Claude, OpenRouter, & Custom OpenAI-Compatible (Ollama / Groq / DeepSeek / GLM / dsb.) dengan parser multi-JSON & SSE yang tangguh.
+            - **Embedded Linux & Debian Terminal**: Bundel Alpine Linux + PRoot bawaan (`Zero-Setup`) dan auto-bootstrap Debian `bookworm` ketika agen membutuhkan `apt-get`, `python3`, `nodejs`, `git`, atau `curl`.
+            - **MCP Server & Client Hub**: Ekspos 20+ tool internal via JSON-RPC (`127.0.0.1:8765`) dan konektor ke server MCP eksternal.
+            - **Skills & Plugins Ecosystem**: Manajemen `SKILL.md` dan plugin dinamis langsung dari proyek atau URL.
+            - **Self-Healing Build Loop & Checkpoints**: Kompilasi langsung dari agen dengan perbaikan error otomatis dan *snapshot rollback* aman.
+          files: |
+            Sketchware_Pro_AI_Agent.apk
+            Sketchware_Pro_AI_Agent-${{ steps.prep.outputs.short_sha }}.apk
+          prerelease: false
+          make_latest: true
